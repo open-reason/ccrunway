@@ -17,9 +17,9 @@ Install also puts Claude Code's and Codex's pace in the macOS menu bar, through
 [SwiftBar](https://github.com/swiftbar/SwiftBar), which it installs if missing
 (`--no-menubar` skips it):
 
-<img src="https://raw.githubusercontent.com/open-reason/ccrunway/main/docs/images/menubar-title-red.png" alt="Menu bar item: the Anthropic mark with four red bars and 14:15 struck through, then the OpenAI mark with three bars" height="42">
+<img src="docs/images/menubar-title-red.png" alt="Menu bar item: the Anthropic mark with four red bars and 14:15 struck through, then the OpenAI mark with three bars" height="42">
 
-<img src="https://raw.githubusercontent.com/open-reason/ccrunway/main/docs/images/menubar-dropdown-red.png" alt="The menu open: Claude Code runs out at 14:15, 40 minutes before the reset, top drain fix-login-flow; per-chat rates; Codex tight with about 5% spare" width="466">
+<img src="docs/images/menubar-dropdown-red.png" alt="The menu open: Claude Code runs out at 14:15, 40 minutes before the reset, top drain fix-login-flow; per-chat rates; Codex tight with about 5% spare" width="466">
 
 <sub>Example data, drawn by ccrunway's own menu bar code (`docs/render-images.mjs`).</sub>
 
@@ -136,7 +136,7 @@ in the hook and status line commands, so Claude Code needs no setting; set it fo
 The title shows each tool's pace bars: grey under pace, green at it, red when it runs out
 before the reset, with the run-out time struck through.
 
-<img src="https://raw.githubusercontent.com/open-reason/ccrunway/main/docs/images/menubar-title-green.png" alt="Menu bar item, both tools under pace: grey bars" height="42">
+<img src="docs/images/menubar-title-green.png" alt="Menu bar item, both tools under pace: grey bars" height="42">
 
 Install turns it on (`--no-menubar` skips it). To turn it on later, or after `menubar off`:
 
