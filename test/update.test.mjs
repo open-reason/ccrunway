@@ -1,4 +1,4 @@
-// node --test update.test.mjs
+// node --test test/update.test.mjs
 // `ccrunway update` against a local registry (node:http on 127.0.0.1, CCRUNWAY_REGISTRY).
 // npx is never run: --check reports only, CCRUNWAY_UPDATE_DRY=1 reports the command that
 // would run. Temp CCRUNWAY_HOME; nothing real is touched.
@@ -11,9 +11,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { newer } from './update.mjs';
+import { newer } from '../src/update.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const src = path.join(here, '..', 'src');
 let server;
 let base;
 const seen = [];
@@ -46,7 +47,7 @@ function env(extra = {}) {
 // async: the registry answers from this process, so spawnSync would deadlock
 const run = (e, ...argv) =>
   new Promise((resolve) => {
-    const c = spawn(process.execPath, [path.join(here, 'cli.mjs'), ...argv], { env: e.env });
+    const c = spawn(process.execPath, [path.join(src, 'cli.mjs'), ...argv], { env: e.env });
     let stdout = '';
     let stderr = '';
     c.stdout.on('data', (d) => (stdout += d));

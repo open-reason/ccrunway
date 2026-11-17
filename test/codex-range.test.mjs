@@ -1,4 +1,4 @@
-// node --test codex-range.test.mjs
+// node --test test/codex-range.test.mjs
 // The verdict in the menu bar (codex-range.mjs, menubar/menubar.mjs, menubar/simulate.mjs):
 // the bands and the cold rule on a synthetic Codex meter, the words, the title's width with
 // 0, 1 and 2 red tools, and the simulation overlay.
@@ -12,11 +12,12 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const src = path.join(here, '..', 'src');
 process.env.CCRUNWAY_HOME = mkdtempSync(path.join(os.tmpdir(), 'ccrunway-codex-range-'));
 
-const { codexRange, verdictOf, verdictShort, verdictText } = await import('./codex-range.mjs');
+const { codexRange, verdictOf, verdictShort, verdictText } = await import('../src/codex-range.mjs');
 const { section, simFor, simulated, titlePng, titleParts, paceLine } = await import(
-  './menubar/menubar.mjs'
+  '../src/menubar/menubar.mjs'
 );
 
 const MIN = 60_000;
@@ -127,7 +128,7 @@ test('title: the run-out time after a red tool only, the earlier one when both a
 
 test('simulation: per tool, 2 min, off; a red sim shows 4 bars and a time', () => {
   const sim = (...a) =>
-    execFileSync(process.execPath, [path.join(here, 'menubar', 'simulate.mjs'), ...a], {
+    execFileSync(process.execPath, [path.join(src, 'menubar', 'simulate.mjs'), ...a], {
       env: process.env,
       encoding: 'utf8',
     });

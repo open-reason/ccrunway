@@ -1,4 +1,4 @@
-// node --test now.test.mjs
+// node --test test/now.test.mjs
 // `ccrunway now` against a temp CCRUNWAY_HOME (pace.json, turn ledgers, status-line
 // snapshots written here) and Codex's fixtures/codex-nov10 through CODEX_HOME, at a fixed
 // clock (CCRUNWAY_NOW). Nothing here touches ~/.claude, ~/.ccrunway or ~/.codex.
@@ -12,6 +12,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const src = path.join(here, '..', 'src');
 const MIN = 60_000;
 const NOW = Date.parse('2026-11-10T12:40:00Z');
 const NOV10 = path.join(here, 'fixtures', 'codex-nov10');
@@ -36,7 +37,7 @@ function env(codex = null) {
 const now = (e, ...argv) => {
   const r = spawnSync(
     process.execPath,
-    [path.join(here, 'cli.mjs'), 'now', ...argv, '--settings', path.join(e.dir, 'settings.json')],
+    [path.join(src, 'cli.mjs'), 'now', ...argv, '--settings', path.join(e.dir, 'settings.json')],
     { env: e.env, encoding: 'utf8' },
   );
   return { ...r, json: argv.includes('--json') ? JSON.parse(r.stdout) : null };
@@ -110,8 +111,8 @@ test('now --json: Claude from pace.json, the ledgers and the snapshots; the menu
 
   // the same chats as the menu bar, in its order, with its rates
   process.env.CCRUNWAY_HOME = e.home;
-  const { claudePace } = await import('./menubar/claude-read.mjs');
-  const { verdictText } = await import('./codex-range.mjs');
+  const { claudePace } = await import('../src/menubar/claude-read.mjs');
+  const { verdictText } = await import('../src/codex-range.mjs');
   const m = claudePace(NOW);
   assert.deepEqual(
     c.chats.map((x) => x.id),
@@ -130,7 +131,7 @@ test('now --json: Claude from pace.json, the ledgers and the snapshots; the menu
   assert.ok(s1.now_pct_per_hour > 0, 'three prompts in the window: a prompt rate');
   assert.deepEqual(s1.helpers, [{ name: 'tests', model: 'Haiku', pct_per_hour: s1.helpers[0].pct_per_hour }]);
   // cold over 150k: the status line's cold-launch price (k = 1 with two rises)
-  const { launchPoints } = await import('./launch.mjs');
+  const { launchPoints } = await import('../src/launch.mjs');
   assert.equal(s1.cache.warm, false);
   assert.equal(Date.parse(s1.cache.expires_at), Math.floor((NOW - 10 * MIN) / 1000) * 1000);
   assert.equal(s1.next_send_cost_pct, Math.round(launchPoints('claude-fable-5-2', 200_000) * 10) / 10);
@@ -212,9 +213,9 @@ test('now --tool codex: the Codex fixture, as the menu bar computes it', async (
   const x = r.json.codex;
   assert.equal(r.json.claude, undefined);
   process.env.CCRUNWAY_HOME = mkdtempSync(path.join(os.tmpdir(), 'ccrunway now-menu-'));
-  const { readCodex } = await import('./codex-sessions.mjs');
-  const { codexPace } = await import('./codex-pace.mjs');
-  const { codexRange } = await import('./codex-range.mjs');
+  const { readCodex } = await import('../src/codex-sessions.mjs');
+  const { codexPace } = await import('../src/codex-pace.mjs');
+  const { codexRange } = await import('../src/codex-range.mjs');
   const data = readCodex(NOW, NOV10);
   const v = codexRange(data, NOW);
   const t = codexPace(data, NOW);

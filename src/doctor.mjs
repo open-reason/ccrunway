@@ -25,6 +25,7 @@ import {
   isOurHook,
   isOurStatus,
   nodeMajor,
+  pkgFile,
   platform,
   settingsPath,
 } from './settings.mjs';
@@ -36,7 +37,7 @@ const INSTALL = 'npx ccrunway install';
 const STALE_MIN = 15; // a meter reading older than this: Claude Code has not sent one lately
 const TURN_MIN = 60;
 const WRAP_MS = 4000; // statusline.mjs gives the wrapped command the same
-export const VERSION = readJSON(path.join(here, 'package.json'), {})?.version ?? '?';
+export const VERSION = readJSON(pkgFile(), {})?.version ?? '?';
 
 const check = (id, required, ok, detail, fix = null) => ({ id, ok, required, detail, fix });
 const ago = (t, now) => span(Math.max(1, Math.round((now - t) / MIN)));

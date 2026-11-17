@@ -1,4 +1,4 @@
-// node --test menubar.test.mjs
+// node --test test/menubar.test.mjs
 // `ccrunway menubar on|off` under CCRUNWAY_SB_ROOT: the Applications folders, LaunchAgents
 // and SwiftBar's preferences live in a temp folder, and open, pkill, launchctl and brew are
 // printed instead of run. Nothing here touches the real SwiftBar, ~/Library or ~/.ccrunway.
@@ -21,6 +21,7 @@ import { test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const src = path.join(here, '..', 'src');
 
 function env(extra = {}) {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'ccrunway menubar-'));
@@ -42,7 +43,7 @@ function env(extra = {}) {
   };
 }
 const cli = (e, ...argv) =>
-  spawnSync(process.execPath, [path.join(here, 'cli.mjs'), ...argv], {
+  spawnSync(process.execPath, [path.join(src, 'cli.mjs'), ...argv], {
     env: e.env,
     encoding: 'utf8',
     input: '', // not a terminal: no question can be answered

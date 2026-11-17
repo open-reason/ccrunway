@@ -1,4 +1,4 @@
-// node --test codex-pace.test.mjs
+// node --test test/codex-pace.test.mjs
 // Codex session files → calls, meter and helpers (codex-sessions.mjs), the tool-wide pace and
 // per-chat split (codex-pace.mjs), the Claude side of the menu bar (menubar/claude-read.mjs)
 // and the title image (menubar/menubar.mjs).
@@ -29,9 +29,9 @@ const fixtures = path.join(here, 'fixtures');
 const fresh = (tag) => mkdtempSync(path.join(os.tmpdir(), `ccrunway-codex-${tag}-`));
 process.env.CCRUNWAY_HOME = fresh('home');
 
-const S = await import('./codex-sessions.mjs');
-const { breakdown, codexPace, priceCall, shortModel, weightOf } = await import('./codex-pace.mjs');
-const { writeJSON } = await import('./state.mjs');
+const S = await import('../src/codex-sessions.mjs');
+const { breakdown, codexPace, priceCall, shortModel, weightOf } = await import('../src/codex-pace.mjs');
+const { writeJSON } = await import('../src/state.mjs');
 
 const MIN = 60_000;
 const NOV07 = path.join(fixtures, 'codex-nov07');
@@ -212,7 +212,7 @@ test('breakdown: bars against the safe rate, 0.5 / 0.9 / 1.1', () => {
 test('claude-read: the ccrunway files → the same breakdown, helpers apart', async () => {
   process.env.CCRUNWAY_HOME = fresh('home');
   const now = Date.now();
-  const { claudePace, spendsOf } = await import('./menubar/claude-read.mjs');
+  const { claudePace, spendsOf } = await import('../src/menubar/claude-read.mjs');
   assert.equal(claudePace(now), null); // ccrunway not installed: nothing to show
   const home = process.env.CCRUNWAY_HOME;
   const reset = now + 3 * 60 * MIN;
@@ -257,8 +257,8 @@ test('claude-read: the ccrunway files → the same breakdown, helpers apart', as
 });
 
 test('menu bar: Claude helpers a row each by name, the unnamed rest as helpers', async () => {
-  const { fromHelperKey, spendsOf } = await import('./menubar/claude-read.mjs');
-  const { claudeHelper } = await import('./menubar/menubar.mjs');
+  const { fromHelperKey, spendsOf } = await import('../src/menubar/claude-read.mjs');
+  const { claudeHelper } = await import('../src/menubar/menubar.mjs');
   const turn = {
     sid: 'x',
     t: 1,
@@ -284,8 +284,8 @@ test('menu bar: Claude helpers a row each by name, the unnamed rest as helpers',
 });
 
 test('menu bar: the title PNG reads back; — for a tool with no data; layout A rows', async () => {
-  const { readMask } = await import('./menubar/png.mjs');
-  const { render, titlePng, titleParts } = await import('./menubar/menubar.mjs');
+  const { readMask } = await import('../src/menubar/png.mjs');
+  const { render, titlePng, titleParts } = await import('../src/menubar/menubar.mjs');
   const none = titleParts(null, null).map(([n]) => n);
   assert.deepEqual(none, ['anthropic', 'dash', 'gap', 'openai', 'dash']);
   const both = titleParts({ bars: 3 }, { bars: 4 });
@@ -307,14 +307,14 @@ test('menu bar: the title PNG reads back; — for a tool with no data; layout A 
 });
 
 test('helper rows: └ per level, the task name before the nickname', async () => {
-  const { codexHelper } = await import('./menubar/menubar.mjs');
+  const { codexHelper } = await import('../src/menubar/menubar.mjs');
   const h = { task: 'or360_activity', nickname: 'Ohm', model: 'gpt-5.6-sol', depth: 1 };
   assert.match(codexHelper(h), /^└ or360_activity · /);
   assert.match(codexHelper({ ...h, task: null, depth: 2 }), /^└└ Ohm · /);
 });
 
 test('chat rows: two chats with one name get the last 4 characters of their ids', async () => {
-  const { section, codexHelper } = await import('./menubar/menubar.mjs');
+  const { section, codexHelper } = await import('../src/menubar/menubar.mjs');
   const chat = (id, perHour) => ({ id, name: 'same', perHour, share: 0.5, helpers: [] });
   const t = {
     perHour: 10,

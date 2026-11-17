@@ -1,4 +1,4 @@
-// node --test install.test.mjs
+// node --test test/install.test.mjs
 // install, uninstall and the CLI against settings files and CCRUNWAY_HOME in temp
 // folders. Nothing here touches ~/.claude or ~/.ccrunway.
 
@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -21,6 +22,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const src = path.join(here, '..', 'src');
 const EVENTS = ['PostToolUse', 'PreModelSwitch', 'Stop', 'UserPromptSubmit'];
 
 // dir: a temp folder with a space in it, like a home folder can have. HOME is moved
@@ -49,7 +51,7 @@ function bake() {
 }
 
 const run = (e, script, argv = [], stdin = '') =>
-  spawnSync(process.execPath, [path.join(here, script), ...argv], {
+  spawnSync(process.execPath, [path.join(src, script), ...argv], {
     input: stdin,
     env: e.env,
     encoding: 'utf8',
@@ -382,7 +384,7 @@ test('CCRUNWAY_HOME set at install goes into the commands and the skill; they wr
 });
 
 test('baked commands: node and home parse out, and they count as ours without the variable', async () => {
-  const { cmdHome, cmdNode, isOurHook, isOurStatus } = await import('./settings.mjs');
+  const { cmdHome, cmdNode, isOurHook, isOurStatus } = await import('../src/settings.mjs');
   const c = (f) => `CCRUNWAY_HOME="/x/my \\$data" "/opt/n/node" "/x/my \\$data/app/${f}"`;
   assert.equal(cmdNode(c('hook.mjs')), '/opt/n/node');
   assert.equal(cmdHome(c('hook.mjs')), '/x/my $data');
@@ -395,7 +397,7 @@ test('baked commands: node and home parse out, and they count as ours without th
 });
 
 test('stableNode: a node on the PATH in an fnm_multishells (temp) folder is replaced by its target', async () => {
-  const { stableNode, isTempPath } = await import('./settings.mjs');
+  const { stableNode, isTempPath } = await import('../src/settings.mjs');
   const dir = mkdtempSync(path.join(os.tmpdir(), 'ccrunway fnm-'));
   const bin = path.join(dir, 'fnm_multishells', '12345_1700000000000', 'bin');
   mkdirSync(bin, { recursive: true });
@@ -404,4 +406,52 @@ test('stableNode: a node on the PATH in an fnm_multishells (temp) folder is repl
   assert.ok(isTempPath('/Users/x/.local/state/fnm_multishells/1_2/bin/node'));
   assert.ok(!isTempPath('/opt/homebrew/bin/node'));
   assert.equal(stableNode(bin, process.execPath), realpathSync(process.execPath));
+});
+
+// the repo keeps its code in src/; the installed copy stays flat (app/hook.mjs, not
+// app/src/hook.mjs), so settings.json commands from installs before src/ existed still
+// point at real files and isOurHook/isOurStatus still match them
+test('the installed app is flat: src/* at app/*, package.json beside it, no src/ inside', () => {
+  const e = bake();
+  write(e.settings, theirs());
+  assert.equal(cli(e, 'install', '--no-menubar').status, 0);
+  const app = path.join(e.home, 'app');
+  for (const f of ['hook.mjs', 'statusline.mjs', 'cli.mjs', 'package.json', 'skill/SKILL.md', 'menubar/menubar.mjs'])
+    assert.ok(existsSync(path.join(app, f)), f);
+  const plug = path.join(app, 'menubar', 'plugin', 'ccrunway.5s.sh');
+  assert.ok(lstatSync(plug).mode & 0o111, 'the plugin is executable');
+  assert.ok(!existsSync(path.join(app, 'src')), 'no src/ in the copy');
+  assert.ok(!existsSync(path.join(app, 'test')), 'no test/ in the copy');
+  const pkg = read(path.join(here, '..', 'package.json'));
+  assert.equal(read(path.join(app, 'package.json')).version, pkg.version);
+  // the copy reads its own package.json: version and doctor's app check agree with this CLI
+  const v = spawnSync(process.execPath, [path.join(app, 'cli.mjs'), 'version'], { env: e.env, encoding: 'utf8' });
+  assert.match(v.stdout, new RegExp(pkg.version.replaceAll('.', '\\.')));
+  const d = spawnSync(process.execPath, [path.join(app, 'cli.mjs'), 'doctor', '--json', '--settings', e.settings], {
+    env: e.env,
+    encoding: 'utf8',
+  });
+  const app_ = JSON.parse(d.stdout).checks.find((c) => c.id === 'app');
+  assert.equal(app_.ok, true, app_.detail);
+});
+
+test('re-install over an app/ from before src/: same commands, no duplicates, stale files gone', () => {
+  const e = bake();
+  write(e.settings, theirs());
+  assert.equal(cli(e, 'install', '--no-menubar').status, 0);
+  const before = read(e.settings);
+  // what 0.4.x left: flat app/ with an older version and a file this version no longer has
+  const app = path.join(e.home, 'app');
+  writeFileSync(path.join(app, 'package.json'), '{"name":"ccrunway","version":"0.4.1"}\n');
+  writeFileSync(path.join(app, 'gone.mjs'), '');
+  assert.equal(cli(e, 'install', '--no-menubar').status, 0);
+  const after = read(e.settings);
+  assert.deepEqual(after.statusLine, before.statusLine);
+  assert.deepEqual(after.hooks, before.hooks);
+  assert.ok(!existsSync(path.join(app, 'gone.mjs')));
+  assert.equal(read(path.join(app, 'package.json')).version, read(path.join(here, '..', 'package.json')).version);
+  // the hook command runs as Claude Code runs it
+  const hook = cmds(after).find((c) => c.includes(`${path.sep}app${path.sep}hook.mjs`));
+  const r = spawnSync('/bin/sh', ['-c', hook], { input: '{}', env: e.env, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
 });

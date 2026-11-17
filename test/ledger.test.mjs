@@ -1,4 +1,4 @@
-// node --test ledger.test.mjs
+// node --test test/ledger.test.mjs
 // The turn ledger (range plan S2) from a trimmed transcript fixture: placeholders for
 // every prompt and reply, real entry shapes. Temp CCRUNWAY_HOME; nothing under ~ is touched.
 
@@ -18,9 +18,10 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const src = path.join(here, '..', 'src');
 const fx = (f) => path.join(here, 'fixtures', f);
 process.env.CCRUNWAY_HOME = mkdtempSync(path.join(os.tmpdir(), 'ccrunway-ledger-'));
-const { closeTurn, openTurn, readTurns } = await import('./ledger.mjs');
+const { closeTurn, openTurn, readTurns } = await import('../src/ledger.mjs');
 
 // opus: 24.1 out, 5.9 write; sonnet: 16.9 out, 4.1 write (points per Mtok)
 const A = (24.1 * 2000 + 5.9 * 40_000) / 1e6; // req_A, 3 entries in the turn + 1 resume repeat
@@ -107,7 +108,7 @@ test('hook.mjs keeps the ledger; the status line shows the pace bar from the fir
   const home = mkdtempSync(path.join(os.tmpdir(), 'ccrunway-ledger-e2e-'));
   const env = { ...process.env, CCRUNWAY_HOME: home, NO_COLOR: '1' };
   const run = (script, stdin) =>
-    spawnSync(process.execPath, [path.join(here, script)], {
+    spawnSync(process.execPath, [path.join(src, script)], {
       input: JSON.stringify(stdin),
       env,
       encoding: 'utf8',
@@ -168,19 +169,19 @@ test('simulate.mjs range green 3: the verdict with 3 pace bars, tagged sim', () 
   const env = { ...process.env, CCRUNWAY_HOME: home, NO_COLOR: '1' };
   const node = (args, stdin = '') =>
     spawnSync(process.execPath, args, { input: stdin, env, encoding: 'utf8' });
-  const sim = node([path.join(here, 'simulate.mjs'), 'range', 'green', '3']);
+  const sim = node([path.join(src, 'simulate.mjs'), 'range', 'green', '3']);
   assert.match(sim.stdout, /green with 3 pace bars/);
   const snap = JSON.parse(readFileSync(fx('statusline-opus-259k.json'), 'utf8'));
   snap.rate_limits.five_hour = {
     used_percentage: 20,
     resets_at: Math.floor((Date.now() + 90 * 60_000) / 1000),
   };
-  const line = node([path.join(here, 'statusline.mjs')], JSON.stringify(snap)).stdout;
+  const line = node([path.join(src, 'statusline.mjs')], JSON.stringify(snap)).stdout;
   assert.match(line, /^ccrunway · pace ▮▮▮▯ +\d+%\/h · .*✓ on track · ~\d+% spare at \S+ · sim\n$/);
-  node([path.join(here, 'simulate.mjs'), 'range', 'cold', '4']);
-  const cold = node([path.join(here, 'statusline.mjs')], JSON.stringify(snap)).stdout;
+  node([path.join(src, 'simulate.mjs'), 'range', 'cold', '4']);
+  const cold = node([path.join(src, 'statusline.mjs')], JSON.stringify(snap)).stdout;
   assert.doesNotMatch(cold, /▮/, 'no bar in the cold state');
-  assert.equal(node([path.join(here, 'simulate.mjs'), 'range', 'green', '5']).status, 1);
+  assert.equal(node([path.join(src, 'simulate.mjs'), 'range', 'green', '5']).status, 1);
 });
 
 test('ledger: Stop before the turn reaches the transcript; the next prompt books it', () => {

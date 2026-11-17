@@ -5,7 +5,7 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "ccrunway": "cli.mjs"
+    "ccrunway": "src/cli.mjs"
   },
   "engines": {
     "node": ">=20"
@@ -22,17 +22,10 @@
     "usage"
   ],
   "scripts": {
-    "test": "node --test *.test.mjs"
+    "test": "node --test test/*.test.mjs"
   },
   "files": [
-    "*.mjs",
-    "!*.test.mjs",
-    "claude-five-weights.json",
-    "codex-weights.json",
-    "skill/",
-    "menubar/*.mjs",
-    "menubar/plugin/",
-    "menubar/sprites/",
+    "src/",
     "README.md",
     "AGENTS.md",
     "LICENSE"

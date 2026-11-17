@@ -5,6 +5,7 @@ import {
   chmodSync,
   copyFileSync,
   cpSync,
+  existsSync,
   mkdirSync,
   readdirSync,
   realpathSync,
@@ -18,6 +19,12 @@ import { fileURLToPath } from 'node:url';
 import { home } from './state.mjs';
 
 export const here = path.dirname(fileURLToPath(import.meta.url));
+// this code's package.json: beside it in the installed copy (app/package.json, written by
+// copyApp), one level up in the repo and the npm package (src/../package.json)
+export const pkgFile = () => {
+  const flat = path.join(here, 'package.json');
+  return existsSync(flat) ? flat : path.join(here, '..', 'package.json');
+};
 // where install copies the code, so the hooks survive a cleared npx cache
 export const appDir = () => path.join(home(), 'app');
 // Copies the runtime files to appDir() unless this already is that copy; returns its path.
@@ -30,9 +37,12 @@ export function copyApp() {
   mkdirSync(path.join(tmp, 'menubar'), { recursive: true });
   const runtime = (f) =>
     (/\.mjs$/.test(f) && !/\.test\.mjs$/.test(f)) ||
-    ['claude-five-weights.json', 'codex-weights.json', 'package.json'].includes(f);
+    ['claude-five-weights.json', 'codex-weights.json'].includes(f);
+  // flat: src/* goes to app/*, so installed paths (app/hook.mjs, app/statusline.mjs) and the
+  // settings.json commands that name them stay what they were before src/ existed
   for (const f of readdirSync(here))
     if (runtime(f)) copyFileSync(path.join(here, f), path.join(tmp, f));
+  copyFileSync(pkgFile(), path.join(tmp, 'package.json'));
   for (const f of readdirSync(path.join(here, 'menubar')))
     if (runtime(f)) copyFileSync(path.join(here, 'menubar', f), path.join(tmp, 'menubar', f));
   for (const d of ['skill', 'menubar/plugin', 'menubar/sprites'])

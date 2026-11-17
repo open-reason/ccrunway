@@ -230,7 +230,7 @@ you are not working. The verdict compares the run-out time with the reset.
 
 Per-chat pace, the top drain and next-send costs come from your transcripts, priced with
 per-model weights measured against the real 5-hour meter on one Max seat
-(`claude-five-weights.json`): output and cache writes cost, cache reads cost nothing. A
+(`src/claude-five-weights.json`): output and cache writes cost, cache reads cost nothing. A
 reload after the prompt cache expires rewrites the whole chat to the cache, which is why a
 long chat's next send can cost several percent.
 
