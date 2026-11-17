@@ -1,0 +1,14 @@
+{
+  "_about": "Codex 5-hour meter points per 1M tokens (100 points = the whole window). cached = input read from cache (charged on Codex, unlike Claude), uncached = input_tokens - cached_input_tokens, output = output_tokens (reasoning included). One-day fits against the meter; astra is about 4x gpt-6.1-sol. An unknown model is priced as `default` and the menu bar says so. codex-pace.mjs rescales all of them by the meter's 1% rises (pace.mjs fillScale).",
+  "default": "gpt-6.1-sol",
+  "models": {
+    "gpt-5.6-sol": { "cached": 8, "uncached": 57, "output": 446, "fit": "2026-11-10" },
+    "gpt-6.1-sol": { "cached": 3.3, "uncached": 52, "output": 396, "fit": "2026-11-06" },
+    "gpt-6-astra": {
+      "cached": 13.2,
+      "uncached": 208,
+      "output": 1584,
+      "fit": "2026-11-07, 4x gpt-6.1-sol"
+    }
+  }
+}

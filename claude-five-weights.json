@@ -1,0 +1,107 @@
+{
+ "date": "2026-11-09/10",
+ "meter": "five_hour",
+ "units": "points per Mtok",
+ "seat": "one Max-tier seat",
+ "method": "per model: read coefficient from read-only runs, then least squares for output and cache write with the read term removed; first call or first parallel batch of each run is the baseline reading; runs crossing 100% excluded. Overnight 2026-11-10 00:12\u201302:06 UTC added one 18-tick run per class for Opus and Sonnet.",
+ "models": {
+  "fable-5-1": {
+   "w_out": 109.2,
+   "w_write": 29.6,
+   "w_read": 0.0,
+   "ticks": 41,
+   "runs": 6,
+   "err": {
+    "out": "\u00b111%",
+    "write": "\u00b18%",
+    "read": "\u00b1215%"
+   },
+   "w_read_note": "one tick on 2.38M read tokens (0.44/Mtok) set to 0: the back-test lands within \u00b11 point with 0 and runs 15\u201345% high with 0.44"
+  },
+  "haiku-5-5": {
+   "w_out": 0.0,
+   "w_write": 1.0,
+   "w_read": 0.0,
+   "ticks": 2,
+   "runs": 3,
+   "err": {
+    "out": "bound",
+    "write": "bound",
+    "read": "\u00b1165%"
+   },
+   "w_read_note": "one tick on 0.85M; treated as 0 like every other model"
+  },
+  "opus-5-5": {
+   "w_out": 24.1,
+   "w_write": 5.9,
+   "w_read": 0.0,
+   "ticks": 57,
+   "runs": 8,
+   "err": {
+    "out": "\u00b18%",
+    "write": "\u00b18%",
+    "read": "bound"
+   }
+  },
+  "sonnet-5-5": {
+   "w_out": 16.9,
+   "w_write": 4.1,
+   "w_read": 0.0,
+   "ticks": 56,
+   "runs": 10,
+   "err": {
+    "out": "\u00b19%",
+    "write": "\u00b19%",
+    "read": "bound"
+   }
+  },
+  "fable-5-2": {
+   "w_out": 84.3,
+   "w_write": 20.0,
+   "w_read": 0.0,
+   "ticks": 33,
+   "runs": 3,
+   "err": {
+    "out": "\u00b17%",
+    "write": "\u00b19%",
+    "read": "\u00b155%"
+   },
+   "w_read_note": "fit says 2.7 on 3 ticks over 1.12M read, but 2 of the 3 ticks arrived on the first read call right after the 101k load and the next ten reads produced 1 tick on 1.02M: a one-call lag of the load cost, not a read cost. Set to 0 like every other model; upper bound \u22481/Mtok."
+  }
+ },
+ "backtest": {
+  "date": "2026-11-09",
+  "intervals": [
+   {
+    "utc": "10:08-11:18",
+    "observed": 11,
+    "predicted": 10.5
+   },
+   {
+    "utc": "11:18-13:14",
+    "observed": 8,
+    "predicted": 8.1
+   },
+   {
+    "utc": "15:40-15:58",
+    "observed": 3,
+    "predicted": 2.2
+   },
+   {
+    "utc": "19:05-19:11",
+    "observed": 13,
+    "predicted": 13.2
+   },
+   {
+    "utc": "20:40-21:27",
+    "observed": 2,
+    "predicted": 1.3
+   }
+  ],
+  "note": "interactive-only intervals with a meter reading within 3 min of both ends; predicted from deduplicated transcripts with the table; Fable read weight 0"
+ },
+ "notes": [
+  "Fable 5.2 (claude-fable-5-2) measured 2026-11-10 06:31\u201306:47 UTC; it draws on the same scoped weekly \"Fable\" bucket as 5.1 (bucket moved 44 \u2192 51 during its runs).",
+  "Event lag: on Fable 5.2 a large cache write showed up in the NEXT call's rate_limit_event, not its own (write run: 68k at call 1 read 0.17, then 0.19 at call 2). With call 0 as baseline this leaks call 0's cost into the run and drops the last call's; for equal-sized calls they cancel, for a small call 0 the run reads a few % low. Within the quoted bars."
+ ]
+}

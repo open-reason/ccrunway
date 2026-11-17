@@ -1,0 +1,127 @@
+// Shared by install.mjs, uninstall.mjs and cli.mjs: find, add and remove ccrunway's
+// entries in a Claude Code settings.json without touching anyone else's.
+
+import {
+  chmodSync,
+  copyFileSync,
+  cpSync,
+  mkdirSync,
+  readdirSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+} from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { home } from './state.mjs';
+
+export const here = path.dirname(fileURLToPath(import.meta.url));
+// where install copies the code, so the hooks survive a cleared npx cache
+export const appDir = () => path.join(home(), 'app');
+// Copies the runtime files to appDir() unless this already is that copy; returns its path.
+// Swapped in whole (app.new → app) so a refresh never runs half of each version.
+export function copyApp() {
+  const app = appDir();
+  if (path.resolve(here) === path.resolve(app)) return app;
+  const tmp = `${app}.new`;
+  rmSync(tmp, { recursive: true, force: true });
+  mkdirSync(path.join(tmp, 'menubar'), { recursive: true });
+  const runtime = (f) =>
+    (/\.mjs$/.test(f) && !/\.test\.mjs$/.test(f)) ||
+    ['claude-five-weights.json', 'codex-weights.json', 'package.json'].includes(f);
+  for (const f of readdirSync(here))
+    if (runtime(f)) copyFileSync(path.join(here, f), path.join(tmp, f));
+  for (const f of readdirSync(path.join(here, 'menubar')))
+    if (runtime(f)) copyFileSync(path.join(here, 'menubar', f), path.join(tmp, 'menubar', f));
+  for (const d of ['skill', 'menubar/plugin', 'menubar/sprites'])
+    cpSync(path.join(here, d), path.join(tmp, d), { recursive: true });
+  // SwiftBar runs only an executable plugin; a umask or a tarball may drop the bit
+  chmodSync(path.join(tmp, 'menubar', 'plugin', PLUGIN), 0o755);
+  rmSync(app, { recursive: true, force: true });
+  renameSync(tmp, app);
+  return app;
+}
+export const PLUGIN = 'ccrunway.5s.sh';
+
+// the node running this, by the name the PATH gives it when that is the same binary:
+// Homebrew's /opt/homebrew/bin/node survives `brew upgrade`, its Cellar path does not
+export function stableNode() {
+  const real = (p) => {
+    try {
+      return realpathSync(p);
+    } catch {
+      return null;
+    }
+  };
+  const me = real(process.execPath);
+  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+    const p = path.join(dir, 'node');
+    if (path.isAbsolute(p) && !p.includes('_npx') && me && real(p) === me) return p;
+  }
+  return process.execPath;
+}
+
+// the turn ledger needs the first two; PostToolUse sizes tool results; PreModelSwitch
+// prices a model switch before it happens
+export const EVENTS = ['UserPromptSubmit', 'Stop', 'PostToolUse', 'PreModelSwitch'];
+
+// quoted: a home folder or node path may hold a space
+const cmd = (node, file) => `"${node}" "${path.join(appDir(), file)}"`;
+export const hookCmd = (node = process.execPath) => cmd(node, 'hook.mjs');
+export const statusCmd = (node = process.execPath) => cmd(node, 'statusline.mjs');
+
+const mentions = (command, file) =>
+  command.includes(path.join(appDir(), file)) ||
+  new RegExp(`\\.ccrunway/app/${file.replace('.', '\\.')}`).test(command);
+
+// ours: the app copy under CCRUNWAY_HOME (or the default ~/.ccrunway/app)
+export const isOurHook = (h) => mentions(h?.command || '', 'hook.mjs');
+export const isOurStatus = (s) => mentions(s?.command || '', 'statusline.mjs');
+
+export function args(argv) {
+  const out = {};
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (!a.startsWith('--')) continue;
+    const next = argv[i + 1];
+    if (next != null && !next.startsWith('--')) {
+      out[a.slice(2)] = next;
+      i++;
+    } else out[a.slice(2)] = true;
+  }
+  return out;
+}
+
+export const settingsPath = (opt) =>
+  path.resolve(opt.settings || path.join(os.homedir(), '.claude', 'settings.json'));
+
+// remove hooks that match `which` (default: ours and the old names); drop groups and
+// events left empty by that
+export function stripHooks(settings, which = isOurHook) {
+  const hooks = settings.hooks || {};
+  for (const ev of Object.keys(hooks)) {
+    if (!Array.isArray(hooks[ev])) continue;
+    hooks[ev] = hooks[ev]
+      .map((g) => ({ ...g, hooks: (g.hooks || []).filter((h) => !which(h)) }))
+      .filter((g) => g.hooks.length);
+    if (!hooks[ev].length) delete hooks[ev];
+  }
+  if (settings.hooks && !Object.keys(settings.hooks).length) settings.hooks = undefined;
+  return settings;
+}
+
+// the status line plus the four hooks, each in a group of its own after anyone else's,
+// 5 s timeout; call stripHooks first. node: the absolute node binary found at install,
+// so nothing depends on the PATH Claude Code was started with.
+export function addRunway(settings, node = process.execPath) {
+  settings.statusLine = { type: 'command', command: statusCmd(node), refreshInterval: 5 };
+  settings.hooks ||= {};
+  for (const ev of EVENTS) {
+    settings.hooks[ev] ||= [];
+    settings.hooks[ev].push({ hooks: [{ type: 'command', command: hookCmd(node), timeout: 5 }] });
+  }
+  return settings;
+}
+
+export const serialize = (obj) => `${JSON.stringify(obj, null, 2)}\n`;

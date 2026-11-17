@@ -1,0 +1,61 @@
+{
+  "session_id": "e3491e24-fc96-4f5c-9679-3ed824792737",
+  "transcript_path": "/Users/you/.claude/projects/-Users-you-code-project/e3491e24-fc96-4f5c-9679-3ed824792737.jsonl",
+  "cwd": "/Users/you/code/project",
+  "scratchpad_dir": "/private/tmp/claude-501/-Users-you-code-project/e3491e24-fc96-4f5c-9679-3ed824792737/scratchpad",
+  "prompt_id": "a9aab5af-94f7-49c1-bee1-e965fbaa27f6",
+  "effort": { "level": "medium" },
+  "session_name": "demo",
+  "model": { "id": "claude-opus-5-5", "display_name": "Opus 5.5" },
+  "workspace": {
+    "current_dir": "/Users/you/code/project",
+    "project_dir": "/Users/you/code/project",
+    "added_dirs": [],
+    "repo": { "host": "github.com", "owner": "you", "name": "project" }
+  },
+  "version": "2.1.311",
+  "output_style": { "name": "default" },
+  "cost": {
+    "total_cost_usd": 10.520401345000003,
+    "total_duration_ms": 7891078,
+    "total_api_duration_ms": 1654727,
+    "total_lines_added": 432,
+    "total_lines_removed": 9
+  },
+  "context_window": {
+    "total_input_tokens": 261430,
+    "total_output_tokens": 47,
+    "context_window_size": 1000000,
+    "current_usage": {
+      "input_tokens": 2,
+      "output_tokens": 47,
+      "cache_creation_input_tokens": 560,
+      "cache_read_input_tokens": 260868
+    },
+    "used_percentage": 26,
+    "remaining_percentage": 74
+  },
+  "exceeds_200k_tokens": true,
+  "prompt_cache": {
+    "warm": true,
+    "caching_observed": true,
+    "ttl": "1h",
+    "expires_at": 1794407508,
+    "requests": 114,
+    "misses": 0,
+    "expected_rebuilds": 0,
+    "hit_ratio": 0.9894128285930848,
+    "cache_write_tokens": 203583,
+    "miss_recache_tokens": 0,
+    "last_miss_at": null,
+    "last_miss_cause": null,
+    "miss_causes": {},
+    "recache_tokens_if_cold": 261430
+  },
+  "fast_mode": false,
+  "thinking": { "enabled": true },
+  "rate_limits": {
+    "five_hour": { "used_percentage": 4, "resets_at": 1794417000 },
+    "seven_day": { "used_percentage": 46, "resets_at": 1794780000 }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "name": "ccrunway",
+  "version": "0.3.0",
+  "description": "Know when you'll hit the Claude Code 5-hour limit at your current pace, and why.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "ccrunway": "cli.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/open-reason/ccrunway.git"
+  },
+  "keywords": [
+    "claude-code",
+    "claude",
+    "statusline",
+    "rate-limit",
+    "usage"
+  ],
+  "scripts": {
+    "test": "node --test *.test.mjs"
+  },
+  "files": [
+    "*.mjs",
+    "!*.test.mjs",
+    "claude-five-weights.json",
+    "codex-weights.json",
+    "skill/",
+    "menubar/*.mjs",
+    "menubar/plugin/",
+    "menubar/sprites/",
+    "README.md",
+    "LICENSE"
+  ]
+}
