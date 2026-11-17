@@ -73,6 +73,7 @@ login item, and SwiftBar itself only if ccrunway downloaded it.
 
 ```bash
 ccrunway status [--json]     # installed or not, the status line it wraps, mute, debug, menu bar
+ccrunway doctor [--json]     # is it working? one line per check, with the fix
 ccrunway mute 2h             # show "muted" instead of the line (30m, 2h, 1d)
 ccrunway unmute
 ccrunway debug on|off        # add the reset's seconds and the meter reading's age
@@ -95,7 +96,7 @@ keeps what it works out in `~/.ccrunway` (`CCRUNWAY_HOME` moves it).
 
 ```bash
 npx ccrunway uninstall
-rm -rf ~/.ccrunway           # optional: the data and the installed copy
+npx ccrunway uninstall --purge   # also deletes ~/.ccrunway: the data and the installed copy
 ```
 
 Uninstall removes only ccrunway's hooks and status line (and the menu bar item) and puts your

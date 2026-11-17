@@ -13,6 +13,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { doctor, doctorText } from './doctor.mjs';
 import { clockNow, filterChats, nowReport, nowText, worstExit } from './now.mjs';
 import { clock, isoLocal } from './range.mjs';
 import { here, isOurHook, isOurStatus, settingsPath } from './settings.mjs';
@@ -31,6 +32,8 @@ const F = {
   tool: { value: 'claude|codex', choices: ['claude', 'codex'], description: 'one tool only' },
   chat: { value: 'id|name', description: 'chats whose id starts with this or whose name is this (any case)' },
   'exit-code': { description: 'exit 10 when the worst tool shown is amber, 11 when red' },
+  force: { description: 'install on an OS other than macOS (untested)' },
+  purge: { description: 'also delete the data folder and the installed copy (CCRUNWAY_HOME)' },
 };
 
 const COMMANDS = [
@@ -50,18 +53,27 @@ const COMMANDS = [
     description: 'installed or not, the wrapped status line, mute, debug, menu bar',
   },
   {
+    name: 'doctor',
+    args: '',
+    flags: ['json', 'settings'],
+    needs_install: false,
+    description:
+      'check the install, check by check: OS, node, settings, status line, wrapped line, hooks, app copy, data folder, meter, turns, menu bar; exit 1 when a required check fails',
+  },
+  {
     name: 'install',
     args: '',
-    flags: ['json', 'settings', 'dry-run', 'node'],
+    flags: ['json', 'settings', 'dry-run', 'node', 'force'],
     needs_install: false,
     description: 'add the status line and hooks to settings.json; your current status line keeps printing above ours',
   },
   {
     name: 'uninstall',
     args: '',
-    flags: ['json', 'settings', 'dry-run'],
+    flags: ['json', 'settings', 'dry-run', 'purge'],
     needs_install: false,
-    description: 'remove them, put your status line back, turn the menu bar item off; the data stays',
+    description:
+      'remove them, put your status line back, turn the menu bar item off; the data stays unless --purge',
   },
   {
     name: 'mute',
@@ -98,7 +110,7 @@ const COMMANDS = [
 
 const EXIT_CODES = {
   0: 'ok',
-  1: 'failed; error.code says why',
+  1: 'failed; error.code says why (doctor: a required check failed, see checks)',
   2: 'bad usage: unknown command, flag or argument (USAGE)',
   3: 'not installed, for a command that needs it (NOT_INSTALLED; fix: npx ccrunway install)',
   10: 'now --exit-code: the worst tool shown is amber',
@@ -109,6 +121,7 @@ const ENV = [
   { name: 'CODEX_HOME', description: "Codex's folder, read for the Codex numbers (default ~/.codex)" },
   { name: 'NO_COLOR', description: 'no colour in text output' },
   { name: 'CCRUNWAY_NOW', description: 'tests: the clock `now` reads at (ms or ISO)' },
+  { name: 'CCRUNWAY_PLATFORM', description: 'tests: the OS install and doctor see (e.g. linux)' },
 ];
 const STATE_DOC = {
   none: 'no 5-hour meter reading for this tool',
@@ -126,8 +139,11 @@ const HELP = `ccrunway ${VERSION}: when you will hit the Claude Code 5-hour limi
                            cold cache's next-send cost; --exit-code exits 10 amber, 11 red
   install                  add the status line and hooks to ~/.claude/settings.json;
                            your current status line keeps printing above ours.
-                           --node <absolute path> picks the node they run with
-  uninstall                remove them and put your status line back
+                           --node <absolute path> picks the node they run with;
+                           macOS only (--force tries anyway, untested)
+  doctor                   is it set up and working? one line per check, with the fix
+  uninstall                remove them and put your status line back; --purge also
+                           deletes the data folder
   status                   installed or not, the wrapped status line, mute, debug, menu bar
   mute [<time>]            show "muted" instead of the runway line for a while:
                            30m, 2h, 1d (default 1h); the meter history keeps updating
@@ -295,6 +311,15 @@ switch (cmd) {
     if (JSON_OUT) emit({ version: VERSION });
     else out(VERSION);
     break;
+
+  case 'doctor': {
+    const d = doctor(opt);
+    if (JSON_OUT) emit(d);
+    else out(doctorText(d));
+    // a failed check is data, not an error: the object above, then exit 1
+    process.exitCode = d.ok ? 0 : 1;
+    break;
+  }
 
   case 'install':
     script('install.mjs', rest);

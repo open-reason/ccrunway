@@ -12,6 +12,7 @@ import {
   readdirSync,
   realpathSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import os from 'node:os';
@@ -113,10 +114,15 @@ test('install: hooks and status line run the copy in CCRUNWAY_HOME/app with the 
 test('--node picks the node, quoted: a path with a space works', () => {
   const e = env();
   write(e.settings, {});
-  cli(e, 'install', '--node', '/opt/my node/bin/node');
+  // a real node, at a path with a space: --node runs it to check its version
+  const node = path.join(e.dir, 'my node', 'bin', 'node');
+  mkdirSync(path.dirname(node), { recursive: true });
+  symlinkSync(process.execPath, node);
+  assert.equal(cli(e, 'install', '--node', node).status, 0);
   const s = read(e.settings);
-  assert.match(s.statusLine.command, /^"\/opt\/my node\/bin\/node" ".*\/app\/statusline\.mjs"$/);
-  assert.match(s.hooks.Stop[0].hooks[0].command, /^"\/opt\/my node\/bin\/node" ".*\/app\/hook\.mjs"$/);
+  const q = (f) => `"${node}" "${path.join(e.home, 'app', f)}"`;
+  assert.equal(s.statusLine.command, q('statusline.mjs'));
+  assert.equal(s.hooks.Stop[0].hooks[0].command, q('hook.mjs'));
 });
 
 test('install → uninstall gives byte-identical settings; re-install is idempotent', () => {
@@ -184,4 +190,128 @@ test('the installed copy prints the wrapped line, then ours, from its own folder
   assert.equal(h.status, 0);
   assert.equal(h.stdout, '');
   assert.ok(statSync(path.join(e.home, 'sessions')).isDirectory());
+});
+
+// preflight: every failure before any write, the data folder included
+const j = (r) => JSON.parse(r.stdout);
+test('install preflight: not macOS is UNSUPPORTED_OS and writes nothing; --force installs anyway', () => {
+  const e = env();
+  e.env.CCRUNWAY_PLATFORM = 'linux';
+  const before = write(e.settings, theirs());
+  for (const extra of [[], ['--dry-run']]) {
+    const r = cli(e, 'install', '--json', ...extra);
+    assert.equal(r.status, 1, extra.join(' '));
+    assert.equal(j(r).error.code, 'UNSUPPORTED_OS');
+    assert.match(j(r).error.message, /linux/);
+    assert.equal(j(r).error.fix, 'npx ccrunway install --force (untested)');
+  }
+  assert.equal(readFileSync(e.settings, 'utf8'), before, 'settings untouched');
+  assert.ok(!existsSync(e.home), 'no data folder');
+  const text = cli(e, 'install');
+  assert.equal(text.status, 1);
+  assert.match(text.stderr, /macOS only/);
+  assert.equal(text.stdout, '');
+
+  const f = cli(e, 'install', '--force', '--json');
+  assert.equal(f.status, 0, f.stdout);
+  assert.equal(j(f).ok, true);
+  assert.ok(existsSync(path.join(e.home, 'app', 'statusline.mjs')));
+});
+
+test('install preflight: settings.json that is not JSON is SETTINGS_UNREADABLE, no stack trace, nothing written', () => {
+  const e = env();
+  const bad = write(e.settings, '{\n  "theme": "dark",\n');
+  const r = cli(e, 'install', '--json');
+  assert.equal(r.status, 1);
+  assert.equal(j(r).error.code, 'SETTINGS_UNREADABLE');
+  assert.match(j(r).error.message, /JSON/);
+  assert.match(j(r).error.fix, /by hand, or point --settings/);
+  const text = cli(e, 'install');
+  assert.equal(text.status, 1);
+  assert.match(text.stderr, /can't read .* as JSON/);
+  assert.doesNotMatch(text.stderr, /^\s+at /m, 'no stack trace');
+  assert.equal(cli(e, 'install', '--dry-run').status, 1);
+  assert.equal(readFileSync(e.settings, 'utf8'), bad);
+  assert.ok(!existsSync(e.home));
+});
+
+test('install preflight: --node must be an absolute path to node 20+, else BAD_NODE', () => {
+  const e = env();
+  const notNode = path.join(e.dir, 'not-node');
+  writeFileSync(notNode, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  for (const n of ['/nope', 'node', notNode]) {
+    const r = cli(e, 'install', '--json', '--node', n);
+    assert.equal(r.status, 1, n);
+    assert.equal(j(r).error.code, 'BAD_NODE', n);
+    assert.match(j(r).error.fix, /--node <absolute path to node 20\+>/);
+  }
+  assert.ok(!existsSync(e.settings));
+  assert.ok(!existsSync(e.home));
+});
+
+test('uninstall --purge removes CCRUNWAY_HOME after restoring settings; --dry-run --purge removes nothing', () => {
+  const e = env();
+  const before = write(e.settings, theirs());
+  cli(e, 'install');
+
+  const dry = cli(e, 'uninstall', '--dry-run', '--purge', '--json');
+  assert.equal(dry.status, 0, dry.stdout);
+  assert.equal(j(dry).would_purge, e.home);
+  const dryText = cli(e, 'uninstall', '--dry-run', '--purge');
+  assert.match(dryText.stderr, new RegExp(`would remove ${e.home}`));
+  assert.ok(existsSync(path.join(e.home, 'app')), 'dry run removes nothing');
+  assert.notEqual(readFileSync(e.settings, 'utf8'), before);
+
+  const text = cli(e, 'uninstall');
+  assert.match(text.stdout.trimEnd().split('\n').at(-1), /data stays in .*`npx ccrunway uninstall --purge` removes it$/);
+  cli(e, 'install');
+  const r = cli(e, 'uninstall', '--purge', '--json');
+  assert.equal(r.status, 0, r.stdout);
+  assert.equal(j(r).purged, true);
+  assert.equal(j(r).data_kept, null);
+  assert.ok(!existsSync(e.home));
+  assert.equal(readFileSync(e.settings, 'utf8'), before);
+});
+
+test('uninstall --purge refuses / , the home folder and a folder above it: UNSAFE_PURGE, nothing changed', () => {
+  const e = env();
+  const fakeHome = path.join(e.dir, 'me');
+  mkdirSync(fakeHome);
+  write(e.settings, theirs());
+  e.env.HOME = fakeHome;
+  e.env.CCRUNWAY_HOME = fakeHome; // set by hand, so the name is not checked: the place is
+  cli(e, 'install');
+  const installed = readFileSync(e.settings, 'utf8');
+  for (const h of [fakeHome, e.dir, '/']) {
+    e.env.CCRUNWAY_HOME = h;
+    const r = cli(e, 'uninstall', '--purge', '--json');
+    assert.equal(r.status, 1, h);
+    assert.equal(j(r).error.code, 'UNSAFE_PURGE', h);
+    assert.equal(readFileSync(e.settings, 'utf8'), installed, 'settings untouched');
+  }
+  assert.ok(existsSync(path.join(fakeHome, 'app')));
+});
+
+test('uninstall --purge refuses a folder holding anything ccrunway did not write, whatever its name', () => {
+  const e = env();
+  write(e.settings, theirs());
+  const docs = path.join(e.dir, 'Documents'); // CCRUNWAY_HOME=~/Documents by mistake
+  e.env.CCRUNWAY_HOME = docs;
+  cli(e, 'install');
+  write(path.join(docs, 'thesis.docx'), 'mine');
+  const installed = readFileSync(e.settings, 'utf8');
+  const r = cli(e, 'uninstall', '--purge', '--json');
+  assert.equal(r.status, 1);
+  assert.equal(j(r).error.code, 'UNSAFE_PURGE');
+  assert.match(j(r).error.message, /thesis\.docx/);
+  assert.equal(readFileSync(e.settings, 'utf8'), installed, 'settings untouched');
+  assert.ok(existsSync(path.join(docs, 'thesis.docx')));
+
+  // a folder with no ccrunway marker at all
+  const empty = path.join(e.dir, 'notes');
+  write(path.join(empty, 'a.txt'), 'x');
+  e.env.CCRUNWAY_HOME = empty;
+  const r2 = cli(e, 'uninstall', '--purge', '--json');
+  assert.equal(j(r2).error.code, 'UNSAFE_PURGE');
+  assert.ok(existsSync(path.join(empty, 'a.txt')));
 });

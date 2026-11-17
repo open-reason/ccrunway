@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Adds ccrunway to Claude Code.
-//   ccrunway install [--settings <path>] [--dry-run]
+//   ccrunway install [--settings <path>] [--dry-run] [--node <abs path>] [--force] [--json]
 // - copies the runtime files to CCRUNWAY_HOME/app (default ~/.ccrunway/app), so clearing
 //   the npx cache breaks nothing
 // - backs up settings.json to CCRUNWAY_HOME/settings.<timestamp>.json
@@ -16,15 +16,22 @@
 // picks the node the hooks run with (default: this one, by its PATH name). --json prints
 // one object instead of the text (cli.mjs has the contract); --dry-run --json puts the
 // settings under settings_after.
+// Preflight, before any write (the data folder included) and on --dry-run too: macOS
+// (UNSUPPORTED_OS; --force installs anyway, untested), node 20+ here (NODE_TOO_OLD) and
+// at --node (BAD_NODE), settings.json readable as JSON (SETTINGS_UNREADABLE).
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
+  MIN_NODE,
   addRunway,
   args,
+  binMajor,
   copyApp,
   here,
   isOurStatus,
+  nodeMajor,
+  platform,
   serialize,
   settingsPath,
   stableNode,
@@ -35,18 +42,53 @@ import { home, readJSON, writeJSON } from './state.mjs';
 const opt = args(process.argv.slice(2));
 const json = opt.json === true;
 const emit = (obj) => process.stdout.write(`${JSON.stringify({ schema: 1, ok: true, ...obj })}\n`);
+function fail(code, message, fix) {
+  if (json) emit({ ok: false, error: { code, message, fix } });
+  else process.stderr.write(`${message}${fix ? `\n  fix: ${fix}` : ''}\n`);
+  process.exit(1);
+}
 const file = settingsPath(opt);
+
+if (platform() !== 'darwin' && opt.force !== true)
+  fail(
+    'UNSUPPORTED_OS',
+    `ccrunway supports macOS only, and this is ${platform()}`,
+    'npx ccrunway install --force (untested)',
+  );
+if ((nodeMajor() ?? 0) < MIN_NODE)
+  fail(
+    'NODE_TOO_OLD',
+    `ccrunway needs node ${MIN_NODE} or newer; this is ${process.version}`,
+    `run it with node ${MIN_NODE}+, or npx ccrunway install --node <path to node ${MIN_NODE}+>`,
+  );
+if (opt.node != null) {
+  const n = opt.node;
+  const v = typeof n === 'string' && path.isAbsolute(n) && existsSync(n) ? binMajor(n) : null;
+  if (v == null || v < MIN_NODE)
+    fail(
+      'BAD_NODE',
+      typeof n !== 'string' || !path.isAbsolute(n)
+        ? `--node takes an absolute path, not "${n}"`
+        : !existsSync(n)
+          ? `--node ${n}: no such file`
+          : v == null
+            ? `--node ${n}: \`${n} --version\` did not run`
+            : `--node ${n} is node ${v}; ccrunway needs ${MIN_NODE}+`,
+      `npx ccrunway install --node <absolute path to node ${MIN_NODE}+>`,
+    );
+}
+
 const existed = existsSync(file);
 const text = existed ? readFileSync(file, 'utf8') : '{}\n';
 let settings;
 try {
   settings = JSON.parse(text);
 } catch (e) {
-  const message = `can't read ${file} as JSON: ${e.message}`;
-  if (json)
-    emit({ ok: false, error: { code: 'SETTINGS_UNREADABLE', message, fix: `fix the JSON in ${file}` } });
-  else process.stderr.write(`${message}\n`);
-  process.exit(1);
+  fail(
+    'SETTINGS_UNREADABLE',
+    `can't read ${file} as JSON: ${e.message}`,
+    `fix the JSON in ${file} by hand, or point --settings at another file`,
+  );
 }
 const meta = readJSON(path.join(home(), 'install.json'), null);
 const again = isOurStatus(settings.statusLine) && meta?.settingsPath === file;
@@ -55,7 +97,7 @@ const again = isOurStatus(settings.statusLine) && meta?.settingsPath === file;
 let prevStatusLine = settings.statusLine ?? null;
 if (isOurStatus(prevStatusLine)) prevStatusLine = again ? (meta.prevStatusLine ?? null) : null;
 
-const node = typeof opt.node === 'string' && path.isAbsolute(opt.node) ? opt.node : stableNode();
+const node = opt.node ?? stableNode();
 const next = addRunway(stripHooks(structuredClone(settings)), node);
 
 if (opt['dry-run']) {
@@ -123,6 +165,7 @@ if (json) {
     node,
     version: readJSON(path.join(here, 'package.json'), {})?.version ?? null,
     next_step: 'open a new Claude Code session',
+    next_steps: ['open a new Claude Code session', 'npx ccrunway doctor'],
   });
   process.exit(0);
 }
@@ -134,6 +177,7 @@ process.stdout.write(
     wrapped ? `your status line stays on top: ${wrapped}` : 'no earlier status line to wrap',
     skillNote,
     'open a new Claude Code session to see the runway line',
+    'check it: npx ccrunway doctor',
     '',
   ].join('\n'),
 );

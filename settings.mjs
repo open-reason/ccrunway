@@ -11,6 +11,7 @@ import {
   renameSync,
   rmSync,
 } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -61,6 +62,24 @@ export function stableNode() {
   }
   return process.execPath;
 }
+
+// the OS ccrunway thinks it runs on; CCRUNWAY_PLATFORM is for tests only (the Linux
+// paths of install and doctor, on a Mac)
+export const platform = () => process.env.CCRUNWAY_PLATFORM || process.platform;
+export const MIN_NODE = 20;
+const major = (v) => Number(/^v?(\d+)\./.exec(String(v).trim())?.[1]) || null;
+export const nodeMajor = () => major(process.version);
+// another node binary's major version, by running it (2 s); null if it does not run
+export function binMajor(bin) {
+  try {
+    const r = spawnSync(bin, ['--version'], { encoding: 'utf8', timeout: 2000, stdio: ['ignore', 'pipe', 'ignore'] });
+    return r.status === 0 ? major(r.stdout) : null;
+  } catch {
+    return null;
+  }
+}
+// the node binary a hook or status line command runs: its first quoted word
+export const cmdNode = (command) => /^"([^"]+)"/.exec(command || '')?.[1] ?? null;
 
 // the turn ledger needs the first two; PostToolUse sizes tool results; PreModelSwitch
 // prices a model switch before it happens

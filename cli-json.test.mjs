@@ -6,7 +6,7 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -60,11 +60,15 @@ test('help --json lists every command with its flags; text help has the new ones
   const j = json(run(e, 'help', '--json'));
   assert.equal(j.ok, true);
   const names = j.commands.map((c) => c.name);
-  for (const n of ['now', 'status', 'install', 'uninstall', 'mute', 'unmute', 'debug', 'menubar', 'help', 'version'])
+  for (const n of ['now', 'doctor', 'status', 'install', 'uninstall', 'mute', 'unmute', 'debug', 'menubar', 'help', 'version'])
     assert.ok(names.includes(n), n);
   const flags = (n) => j.commands.find((c) => c.name === n).flags.map((f) => f.name);
   assert.ok(flags('install').includes('--node <abs path>'));
   assert.ok(flags('now').includes('--exit-code'));
+  assert.ok(flags('install').includes('--force'));
+  assert.ok(!flags('uninstall').includes('--force'), '--force is install`s only');
+  assert.ok(flags('uninstall').includes('--purge'));
+  assert.ok(j.env.some((v) => v.name === 'CCRUNWAY_PLATFORM'));
   for (const c of j.commands) {
     assert.ok(flags(c.name).includes('--json'), `${c.name} takes --json`);
     assert.equal(typeof c.needs_install, 'boolean');
@@ -82,6 +86,9 @@ test('help --json lists every command with its flags; text help has the new ones
   const text = run(e, '--help').stdout;
   assert.match(text, /^ {2}now \[--tool claude\|codex\]/m);
   assert.match(text, /--node <absolute path>/);
+  assert.match(text, /^ {2}doctor /m);
+  assert.match(text, /--force/);
+  assert.match(text, /--purge/);
   assert.match(text, /menubar \[status\|on\|off\]/);
   assert.match(text, /default 1h/);
 });
@@ -103,6 +110,8 @@ test('every command --json: one object, schema 1', () => {
   assert.ok(!existsSync(e.settings), 'dry run writes nothing');
 
   const node = path.join(e.dir, 'my node', 'node');
+  mkdirSync(path.dirname(node), { recursive: true });
+  symlinkSync(process.execPath, node);
   const ins = json(run(e, 'install', '--json', '--node', node, ...s));
   assert.equal(ins.ok, true);
   assert.equal(ins.settings, e.settings);
@@ -113,6 +122,7 @@ test('every command --json: one object, schema 1', () => {
   assert.equal(ins.node, node);
   assert.match(ins.version, /^\d+\.\d+\.\d+/);
   assert.equal(ins.next_step, 'open a new Claude Code session');
+  assert.deepEqual(ins.next_steps, ['open a new Claude Code session', 'npx ccrunway doctor']);
 
   const st = json(run(e, 'status', '--json', ...s));
   assert.equal(st.installed, true);
@@ -141,6 +151,8 @@ test('every command --json: one object, schema 1', () => {
   assert.equal(un.restored_from_backup, false);
   assert.equal(un.skill_removed, true);
   assert.equal(un.menubar_off, false);
+  assert.equal(un.purged, false);
+  assert.equal(un.data_kept, e.home);
   assert.ok(!existsSync(e.settings));
   const none = run(e, 'uninstall', '--json', ...s);
   assert.equal(none.status, 1);
