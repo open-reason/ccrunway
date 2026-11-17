@@ -45,7 +45,7 @@ npx ccrunway install --json
  "backup":"~/.ccrunway/settings.2026-11-17T11-24-32-833Z.json",
  "wraps":"ccusage statusline","skill":"~/.claude/skills/ccrunway/SKILL.md",
  "restores":"~/.ccrunway/settings.2026-11-17T11-24-32-833Z.json",
- "app":"~/.ccrunway/app","node":"/opt/homebrew/bin/node","version":"0.4.2",
+ "app":"~/.ccrunway/app","node":"/opt/homebrew/bin/node","version":"0.4.3",
  "menubar":{"on":true,"detail":"~/.ccrunway/menubar/ccrunway.5s.sh (SwiftBar's plugin folder, set by ccrunway)","code":null,"hint":"npx ccrunway menubar off","swiftbar_installed":"brew"},
  "next_step":"open a new Claude Code session",
  "next_steps":["open a new Claude Code session","npx ccrunway doctor"]}
