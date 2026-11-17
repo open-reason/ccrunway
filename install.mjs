@@ -8,7 +8,9 @@
 //   first and prints its output above the runway line
 // - sets statusLine to ours and adds hook.mjs on UserPromptSubmit, Stop, PostToolUse and
 //   PreModelSwitch, each in its own group, 5 s timeout, with the absolute node path;
-//   everyone else's hooks stay
+//   everyone else's hooks stay. A CCRUNWAY_HOME set now goes into each command, and into
+//   the skill's (CCRUNWAY_HOME="…" "<node>" "…/hook.mjs"), so they reach that folder
+//   however Claude Code was started
 // - writes the `ccrunway` skill next to the settings file (skills/ccrunway/SKILL.md)
 // - re-running is idempotent: our old entries are removed before the new ones go in, and
 //   uninstall keeps pointing at the first backup and the first saved statusLine
@@ -27,6 +29,7 @@ import {
   addRunway,
   args,
   binMajor,
+  cliCmd,
   copyApp,
   here,
   isOurStatus,
@@ -141,10 +144,7 @@ try {
     skillNote = `skill: ${skillDir} exists and is not ccrunway's; left alone`;
     skillAt = null;
   } else {
-    const body = readFileSync(path.join(here, 'skill', 'SKILL.md'), 'utf8').replaceAll(
-      '{{CLI}}',
-      `"${node}" "${path.join(app, 'cli.mjs')}"`,
-    );
+    const body = readFileSync(path.join(here, 'skill', 'SKILL.md'), 'utf8').replaceAll('{{CLI}}', cliCmd(node));
     mkdirSync(skillDir, { recursive: true });
     writeFileSync(skillFile, body);
   }

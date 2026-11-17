@@ -3,7 +3,8 @@
 // it is writable, removed at once. Each check is { id, ok, required, detail, fix }:
 //   ok        true, false, or null when it does not apply here (detail says why)
 //   required  a false here makes doctor's ok false and its exit 1; the others (meter,
-//             turns, five_hour_meter) tell "warming up" from "broken" and never fail it
+//             turns, five_hour_meter, menubar_running) tell "warming up" or "closed"
+//             from "broken" and never fail it
 //   fix       a command or what to do, or null
 // Not installed is a result, not an error: the install checks fail with fix
 // `npx ccrunway install` (doctor is what you run when unsure).
@@ -90,24 +91,33 @@ function statusLineCheck({ settings }) {
   return check('status_line', true, true, s.command);
 }
 
-// run as statusline.mjs runs it: /bin/sh -c, a status line's stdin, 4 s
+// run as statusline.mjs runs it: /bin/sh -c, 4 s, on the stdin Claude Code last sent a
+// status line here (the newest snapshot, less ccrunway's own _ keys). Many status lines
+// read fields such as .model.id, so `{}` would fail ones that work; with no session yet
+// there is nothing real to test with, so it is skipped.
 function wrappedCheck({ meta }) {
   const cmd = meta?.prevStatusLine?.command;
   if (!cmd || typeof cmd !== 'string') return check('wrapped', false, null, 'no earlier status line to wrap');
+  const last = snapshots()
+    .map((s) => readJSON(s.file, null))
+    .find((j) => j && typeof j === 'object');
+  if (!last) return check('wrapped', false, null, 'no Claude Code session yet to test it with');
+  const input = JSON.stringify(Object.fromEntries(Object.entries(last).filter(([k]) => !k.startsWith('_'))));
   const t0 = Date.now();
   const r = spawnSync('/bin/sh', ['-c', cmd], {
-    input: '{}',
+    input,
     encoding: 'utf8',
     timeout: WRAP_MS,
     stdio: ['pipe', 'pipe', 'ignore'],
   });
   const msTaken = Date.now() - t0;
   const fix = `fix \`${cmd}\` so it prints within 4 s, or reinstall (${INSTALL}) after changing statusLine`;
+  const used = "with the last session's input";
   if (r.error?.code === 'ETIMEDOUT' || r.signal)
-    return check('wrapped', true, false, `\`${cmd}\` took over ${WRAP_MS / 1000} s; only the runway line prints`, fix);
+    return check('wrapped', true, false, `\`${cmd}\` took over ${WRAP_MS / 1000} s ${used}; only the runway line prints`, fix);
   if (r.status !== 0)
-    return check('wrapped', true, false, `\`${cmd}\` exited ${r.status ?? r.error?.code} in ${msTaken} ms`, fix);
-  return check('wrapped', true, true, `\`${cmd}\` in ${msTaken} ms`);
+    return check('wrapped', true, false, `\`${cmd}\` exited ${r.status ?? r.error?.code} ${used}, ${msTaken} ms`, fix);
+  return check('wrapped', true, true, `\`${cmd}\` ${used}, ${msTaken} ms`);
 }
 
 function hooksCheck({ settings }) {
@@ -225,16 +235,26 @@ function fiveHourCheck() {
   );
 }
 
-// required once `ccrunway menubar on` ran (menubar.json), else skipped
+// required once `ccrunway menubar on` ran (menubar.json), else skipped. Two ids, so each
+// keeps one `required`: menubar (the link, SwiftBar installed, reading our folder) fails
+// doctor; menubar_running (SwiftBar open) only warns, since quitting it is a choice
 function menubarCheck() {
   if (!existsSync(recordPath())) return check('menubar', false, null, 'off');
   const m = menubarState();
   const fix = 'npx ccrunway menubar on';
   if (!m.on) return check('menubar', true, false, `the link ${m.link ?? '?'} is gone`, fix);
   if (!m.swiftbar) return check('menubar', true, false, 'SwiftBar is not installed', fix);
-  if (!m.swiftbar_running) return check('menubar', true, false, 'SwiftBar is not running', 'open -a SwiftBar');
   if (m.hidden) return check('menubar', true, false, 'SwiftBar reads another plugin folder', fix);
-  return check('menubar', true, true, `${m.link}, SwiftBar running`);
+  return check('menubar', true, true, m.link);
+}
+
+function menubarRunningCheck() {
+  if (!existsSync(recordPath())) return check('menubar_running', false, null, 'menu bar off');
+  const m = menubarState();
+  if (!m.swiftbar) return check('menubar_running', false, null, 'SwiftBar is not installed');
+  if (!m.swiftbar_running)
+    return check('menubar_running', false, false, 'SwiftBar is not running, so the item does not show', 'open -a SwiftBar');
+  return check('menubar_running', false, true, 'SwiftBar running');
 }
 
 export function doctor(opt = {}, now = Date.now()) {
@@ -252,6 +272,7 @@ export function doctor(opt = {}, now = Date.now()) {
     turnsCheck(c),
     fiveHourCheck(c),
     menubarCheck(c),
+    menubarRunningCheck(c),
   ];
   return { ok: checks.every((k) => !k.required || k.ok === true), checks };
 }

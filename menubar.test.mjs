@@ -149,7 +149,7 @@ test('without a terminal or --yes nothing is installed', () => {
   const e = env({ CCRUNWAY_SB_BREW: '/opt/homebrew/bin/brew' });
   const r = cli(e, 'menubar', 'on');
   assert.equal(r.status, 1);
-  assert.match(r.stdout, /SwiftBar is needed\. Run `brew install --cask swiftbar`, or `ccrunway menubar on --yes`/);
+  assert.match(r.stdout, /SwiftBar is needed\. Run `brew install --cask swiftbar`, or `npx ccrunway menubar on --yes`/);
   assert.doesNotMatch(r.stdout, /\(test\) .*brew install/);
   assert.ok(!existsSync(sysApp(e)));
   assert.equal(folderOf(e), null);

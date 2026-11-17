@@ -179,8 +179,8 @@ function installSwiftBar(out, yes, prompt, info) {
   if (brew) {
     const a = ask('SwiftBar draws the menu bar item. Install it with `brew install --cask swiftbar`?', yes, prompt);
     if (!a) {
-      out('menu bar not set up: SwiftBar is needed. Run `brew install --cask swiftbar`, or `ccrunway menubar on --yes`');
-      why(info, declined(a), 'ccrunway menubar on --yes');
+      out('menu bar not set up: SwiftBar is needed. Run `brew install --cask swiftbar`, or `npx ccrunway menubar on --yes`');
+      why(info, declined(a), 'npx ccrunway menubar on --yes');
       return null;
     }
     if (!act(out, brew, ['install', '--cask', 'swiftbar'], !prompt) || !swiftbarApp()) {
@@ -199,8 +199,8 @@ function installSwiftBar(out, yes, prompt, info) {
   const { url, sha256 } = download();
   const a = ask(`SwiftBar draws the menu bar item. Download SwiftBar ${SWIFTBAR.version} from github.com/swiftbar/SwiftBar into ~/Applications?`, yes, prompt);
   if (!a) {
-    out('menu bar not set up: SwiftBar is needed. Run `ccrunway menubar on --yes` to download it');
-    why(info, declined(a), 'ccrunway menubar on --yes');
+    out('menu bar not set up: SwiftBar is needed. Run `npx ccrunway menubar on --yes` to download it');
+    why(info, declined(a), 'npx ccrunway menubar on --yes');
     return null;
   }
   const tmp = mkdtempSync(path.join(os.tmpdir(), 'ccrunway-swiftbar-'));
@@ -211,7 +211,7 @@ function installSwiftBar(out, yes, prompt, info) {
       execFileSync('curl', ['-fsSL', '-m', '180', url, '-o', zip], { stdio: 'ignore' });
     } catch {
       out(`menu bar not set up: could not download SwiftBar (${url})`);
-      why(info, 'SWIFTBAR_DOWNLOAD_FAILED', 'ccrunway menubar on --yes');
+      why(info, 'SWIFTBAR_DOWNLOAD_FAILED', 'npx ccrunway menubar on --yes');
       return null;
     }
     const got = createHash('sha256').update(readFileSync(zip)).digest('hex');

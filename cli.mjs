@@ -58,7 +58,7 @@ const COMMANDS = [
     flags: ['json', 'settings'],
     needs_install: false,
     description:
-      'check the install, check by check: OS, node, settings, status line, wrapped line, hooks, app copy, data folder, meter, turns, menu bar; exit 1 when a required check fails',
+      'check the install, check by check: OS, node, settings, status line, wrapped line, hooks, app copy, data folder, meter, turns, menu bar, SwiftBar running; exit 1 when a required check fails',
   },
   {
     name: 'install',
@@ -173,7 +173,7 @@ function fail(message, { code = 'FAILED', fix = null, exit = 1, extra = {}, text
   process.exit(exit);
 }
 const usage = (message, text = message) =>
-  fail(message, { code: 'USAGE', fix: 'ccrunway help', exit: 2, text });
+  fail(message, { code: 'USAGE', fix: 'npx ccrunway help', exit: 2, text });
 
 // argv after the command → { pos, opt }, checked against the command's flags
 function parse(spec, rest) {
@@ -244,7 +244,7 @@ function menubarLines(m) {
       `swiftbar: ${
         m.swiftbar
           ? `${m.swiftbar_running ? 'running' : 'not running (open it to see the item)'}, ${m.swiftbar}${m.swiftbar_installed_by ? ` (installed by ccrunway with ${m.swiftbar_installed_by})` : ''}`
-          : 'not installed: run `ccrunway menubar on`'
+          : 'not installed: run `npx ccrunway menubar on`'
       }`,
     );
   return lines;
@@ -335,7 +335,7 @@ switch (cmd) {
     if (opt.chat != null && !filterChats(report, opt.chat))
       fail(`no chat matches "${opt.chat}" in the last 20 min`, {
         code: 'NO_SUCH_CHAT',
-        fix: `ccrunway now${opt.tool ? ` --tool ${opt.tool}` : ''}`,
+        fix: `npx ccrunway now${opt.tool ? ` --tool ${opt.tool}` : ''}`,
       });
     const muted = mutedUntil();
     if (JSON_OUT)

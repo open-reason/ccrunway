@@ -23,16 +23,27 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const EVENTS = ['PostToolUse', 'PreModelSwitch', 'Stop', 'UserPromptSubmit'];
 
-// dir: a temp folder with a space in it, like a home folder can have
+// dir: a temp folder with a space in it, like a home folder can have. HOME is moved
+// there and CCRUNWAY_HOME left unset, so the data goes to the default <HOME>/.ccrunway
+// and the commands have their default form; bake() sets CCRUNWAY_HOME instead.
 function env() {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'ccrunway install-'));
-  const home = path.join(dir, 'home');
+  const me = path.join(dir, 'user');
+  mkdirSync(me);
+  const e = { ...process.env, HOME: me, NO_COLOR: '1' };
+  delete e.CCRUNWAY_HOME;
   return {
     dir,
-    home,
+    home: path.join(me, '.ccrunway'),
     settings: path.join(dir, 'claude', 'settings.json'),
-    env: { ...process.env, CCRUNWAY_HOME: home, NO_COLOR: '1' },
+    env: e,
   };
+}
+function bake() {
+  const e = env();
+  e.home = path.join(e.dir, 'data');
+  e.env.CCRUNWAY_HOME = e.home;
+  return e;
 }
 
 const run = (e, script, argv = [], stdin = '') =>
@@ -314,4 +325,66 @@ test('uninstall --purge refuses a folder holding anything ccrunway did not write
   const r2 = cli(e, 'uninstall', '--purge', '--json');
   assert.equal(j(r2).error.code, 'UNSAFE_PURGE');
   assert.ok(existsSync(path.join(empty, 'a.txt')));
+});
+
+test('CCRUNWAY_HOME set at install goes into the commands and the skill; they write there without it', () => {
+  const e = bake();
+  const before = write(e.settings, theirs("printf 'their line'"));
+  assert.equal(cli(e, 'install').status, 0);
+  const s = read(e.settings);
+  const node = read(path.join(e.home, 'install.json')).node;
+  const q = (f) => `CCRUNWAY_HOME="${e.home}" "${node}" "${path.join(e.home, 'app', f)}"`;
+  assert.equal(s.statusLine.command, q('statusline.mjs'));
+  for (const ev of EVENTS) assert.equal(s.hooks[ev].at(-1).hooks[0].command, q('hook.mjs'), ev);
+  const skill = readFileSync(path.join(path.dirname(e.settings), 'skills', 'ccrunway', 'SKILL.md'), 'utf8');
+  assert.ok(skill.includes(q('cli.mjs')));
+
+  // as Claude Code started without the variable runs them: /bin/sh -c
+  const bare = { ...e.env };
+  delete bare.CCRUNWAY_HOME;
+  const fixture = readFileSync(path.join(here, 'fixtures', 'statusline-opus-259k.json'), 'utf8');
+  const sl = spawnSync('/bin/sh', ['-c', s.statusLine.command], { input: fixture, env: bare, encoding: 'utf8' });
+  assert.equal(sl.status, 0, sl.stderr);
+  assert.match(sl.stdout, /^their line\nccrunway · pace /, 'the wrapped line was found in the baked home');
+  const h = spawnSync('/bin/sh', ['-c', s.hooks.UserPromptSubmit.at(-1).hooks[0].command], {
+    input: '{}',
+    env: bare,
+    encoding: 'utf8',
+  });
+  assert.equal(h.status, 0, h.stderr);
+  assert.ok(readdirSync(path.join(e.home, 'sessions')).length, 'snapshot and hook wrote into the baked home');
+  assert.ok(!existsSync(path.join(bare.HOME, '.ccrunway')), 'nothing in the default home');
+
+  // re-install replaces, uninstall gives the bytes back
+  assert.equal(cli(e, 'install').status, 0);
+  assert.equal(cmds(read(e.settings)).filter((c) => c === q('hook.mjs')).length, 4);
+  assert.deepEqual(read(e.settings).statusLine.command, q('statusline.mjs'));
+  const off = cli(e, 'uninstall');
+  assert.equal(off.status, 0, off.stderr);
+  assert.equal(readFileSync(e.settings, 'utf8'), before);
+});
+
+test('baked commands: node and home parse out, and they count as ours without the variable', async () => {
+  const { cmdHome, cmdNode, isOurHook, isOurStatus } = await import('./settings.mjs');
+  const c = (f) => `CCRUNWAY_HOME="/x/my \\$data" "/opt/n/node" "/x/my \\$data/app/${f}"`;
+  assert.equal(cmdNode(c('hook.mjs')), '/opt/n/node');
+  assert.equal(cmdHome(c('hook.mjs')), '/x/my $data');
+  assert.equal(cmdNode('"/opt/n/node" "/y/app/hook.mjs"'), '/opt/n/node');
+  assert.equal(cmdHome('"/opt/n/node" "/y/app/hook.mjs"'), null);
+  assert.ok(isOurHook({ command: c('hook.mjs') }));
+  assert.ok(isOurStatus({ command: c('statusline.mjs') }));
+  assert.ok(!isOurHook({ command: c('statusline.mjs') }));
+  assert.ok(!isOurHook({ command: 'CCRUNWAY_HOME="/x" my-hook /x/app/hook.mjs' }), 'needs the quoted form');
+});
+
+test('stableNode: a node on the PATH in an fnm_multishells (temp) folder is replaced by its target', async () => {
+  const { stableNode, isTempPath } = await import('./settings.mjs');
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'ccrunway fnm-'));
+  const bin = path.join(dir, 'fnm_multishells', '12345_1700000000000', 'bin');
+  mkdirSync(bin, { recursive: true });
+  symlinkSync(process.execPath, path.join(bin, 'node'));
+  assert.ok(isTempPath(path.join(bin, 'node')));
+  assert.ok(isTempPath('/Users/x/.local/state/fnm_multishells/1_2/bin/node'));
+  assert.ok(!isTempPath('/opt/homebrew/bin/node'));
+  assert.equal(stableNode(bin, process.execPath), realpathSync(process.execPath));
 });

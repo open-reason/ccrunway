@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -92,6 +92,7 @@ const IDS = [
   'turns',
   'five_hour_meter',
   'menubar',
+  'menubar_running',
 ];
 
 test('doctor: a full install passes every required check, exit 0; text has one line per check', () => {
@@ -107,7 +108,7 @@ test('doctor: a full install passes every required check, exit 0; text has one l
     assert.deepEqual(Object.keys(c), ['id', 'ok', 'required', 'detail', 'fix']);
     if (c.required) assert.equal(c.ok, true, c.id);
   }
-  assert.match(d.by.wrapped.detail, /^`printf 'their line'` in \d+ ms$/);
+  assert.match(d.by.wrapped.detail, /^`printf 'their line'` with the last session's input, \d+ ms$/);
   assert.equal(d.by.meter.ok, true);
   assert.equal(d.by.turns.ok, true);
   assert.equal(d.by.five_hour_meter.ok, true);
@@ -119,7 +120,8 @@ test('doctor: a full install passes every required check, exit 0; text has one l
   const lines = t.stdout.trimEnd().split('\n');
   assert.equal(lines.length, IDS.length + 1);
   assert.match(lines[0], /^✓ platform {2,}macOS$/);
-  assert.match(lines.at(-2), /^– menubar {2,}skipped: off$/);
+  assert.match(lines.at(-3), /^– menubar {2,}skipped: off$/);
+  assert.match(lines.at(-2), /^– menubar_running {2,}skipped: menu bar off$/);
   assert.match(lines.at(-1), /^ok: every required check passes$/);
 });
 
@@ -202,7 +204,8 @@ test('doctor: a meter reading 2 h old is meter false, still ok at the top; a sna
 test('doctor: a hook whose node is gone fails hooks; a missing event is named', () => {
   const e = installed();
   const s = JSON.parse(readFileSync(e.settings, 'utf8'));
-  s.hooks.Stop[0].hooks[0].command = s.hooks.Stop[0].hooks[0].command.replace(/^"[^"]+"/, '"/nope/node"');
+  // the test home is baked in: CCRUNWAY_HOME="…" "<node>" "…/hook.mjs"
+  s.hooks.Stop[0].hooks[0].command = s.hooks.Stop[0].hooks[0].command.replace(/^(CCRUNWAY_HOME="[^"]+" )"[^"]+"/, '$1"/nope/node"');
   delete s.hooks.PreModelSwitch;
   write(e.settings, s);
   const d = doctor(e);
@@ -219,5 +222,62 @@ test('doctor: not macOS fails platform with no fix command', () => {
   assert.equal(d.by.platform.ok, false);
   assert.equal(d.by.platform.fix, null);
   assert.match(d.by.platform.detail, /^linux: ccrunway supports macOS only; --force installs anyway, untested$/);
+  assert.equal(d.status, 1);
+});
+
+// a status line that reads .model.id, as many do: `{}` would fail it, the real input not
+const NEEDS_MODEL = `"${process.execPath}" -e 'const j = JSON.parse(require("fs").readFileSync(0, "utf8")); if (!j.model.id || "_at" in j) process.exit(3); console.log(j.model.id)'`;
+
+test("doctor: wrapped runs on the last session's input, ccrunway's _ keys left out", () => {
+  const e = installed({ statusLine: NEEDS_MODEL });
+  const d = doctor(e);
+  assert.equal(d.by.wrapped.ok, true, d.by.wrapped.detail);
+  assert.equal(d.by.wrapped.required, true);
+  assert.match(d.by.wrapped.detail, /with the last session's input, \d+ ms$/);
+
+  // the newest snapshot is the input: one without a model fails it
+  write(path.join(e.home, 'sessions', 's2-bbbb.json'), { session_id: 's2-bbbb', _at: Date.now() });
+  const later = new Date(Date.now() + 1000);
+  utimesSync(path.join(e.home, 'sessions', 's2-bbbb.json'), later, later);
+  const bad = doctor(e);
+  assert.equal(bad.by.wrapped.ok, false);
+  assert.match(bad.by.wrapped.detail, /exited 1 with the last session's input/);
+  assert.equal(bad.ok, false);
+});
+
+test('doctor: no session snapshot yet skips wrapped, not required', () => {
+  const e = installed({ statusLine: NEEDS_MODEL });
+  rmSync(path.join(e.home, 'sessions'), { recursive: true });
+  const d = doctor(e);
+  assert.equal(d.by.wrapped.ok, null);
+  assert.equal(d.by.wrapped.required, false);
+  assert.equal(d.by.wrapped.detail, 'no Claude Code session yet to test it with');
+});
+
+test('doctor: SwiftBar closed is menubar_running false, a warning; SwiftBar gone fails menubar', () => {
+  const e = installed();
+  mkdirSync(path.join(e.env.CCRUNWAY_SB_ROOT, 'Applications', 'SwiftBar.app'), { recursive: true });
+  const on = spawnSync(process.execPath, [path.join(here, 'cli.mjs'), 'menubar', 'on'], { env: e.env, encoding: 'utf8', input: '' });
+  assert.equal(on.status, 0, on.stdout + on.stderr);
+  let d = doctor(e);
+  assert.equal(d.by.menubar.ok, true);
+  assert.equal(d.by.menubar_running.ok, true);
+  assert.equal(d.ok, true);
+
+  rmSync(path.join(e.env.CCRUNWAY_SB_ROOT, 'running'));
+  d = doctor(e);
+  assert.equal(d.by.menubar.ok, true);
+  assert.equal(d.by.menubar_running.ok, false);
+  assert.equal(d.by.menubar_running.required, false);
+  assert.equal(d.by.menubar_running.fix, 'open -a SwiftBar');
+  assert.equal(d.ok, true);
+  assert.equal(d.status, 0);
+
+  rmSync(path.join(e.env.CCRUNWAY_SB_ROOT, 'Applications', 'SwiftBar.app'), { recursive: true });
+  d = doctor(e);
+  assert.equal(d.by.menubar.ok, false);
+  assert.equal(d.by.menubar.required, true);
+  assert.equal(d.by.menubar.fix, 'npx ccrunway menubar on');
+  assert.equal(d.by.menubar_running.ok, null);
   assert.equal(d.status, 1);
 });

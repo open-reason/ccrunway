@@ -46,6 +46,7 @@ say them as local clock times.
 
 `doctor --json`: each check is `{id, ok, required, detail, fix}`. A false `meter`, `turns` or
 `five_hour_meter` right after install means warming up: send messages in a new session. A
+false `menubar_running` means SwiftBar is closed (`open -a SwiftBar`), a warning only. A
 failing required check names its fix; re-running install fixes most of them.
 
 ## Rules

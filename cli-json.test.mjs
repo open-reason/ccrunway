@@ -207,7 +207,7 @@ test('menubar: bare means status; on --json with no SwiftBar and no terminal is 
   assert.equal(r.status, 1);
   const j = json(r);
   assert.equal(j.error.code, 'NEEDS_CONFIRM');
-  assert.equal(j.error.fix, 'ccrunway menubar on --yes');
+  assert.equal(j.error.fix, 'npx ccrunway menubar on --yes');
   assert.ok(!j.log.some((l) => /\(test\) .*brew install/.test(l)), 'nothing installed');
   // no brew: the download asks the same way
   const d = env();

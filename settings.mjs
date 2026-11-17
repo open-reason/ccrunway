@@ -46,8 +46,18 @@ export function copyApp() {
 export const PLUGIN = 'ccrunway.5s.sh';
 
 // the node running this, by the name the PATH gives it when that is the same binary:
-// Homebrew's /opt/homebrew/bin/node survives `brew upgrade`, its Cellar path does not
-export function stableNode() {
+// Homebrew's /opt/homebrew/bin/node survives `brew upgrade`, its Cellar path does not.
+// A PATH name in a per-shell temp folder does not survive the shell: fnm puts a
+// fnm_multishells/<pid>_<time>/bin link on each shell's PATH and macOS clears the temp
+// folders, so there the link's target is used instead.
+const TEMP = () => [os.tmpdir(), '/private/var/folders', '/var/folders', '/tmp', '/private/tmp'];
+export const isTempPath = (p) =>
+  p.includes(`${path.sep}fnm_multishells${path.sep}`) ||
+  TEMP().some((t) => {
+    const r = path.resolve(t);
+    return p === r || p.startsWith(`${r}${path.sep}`);
+  });
+export function stableNode(PATH = process.env.PATH, execPath = process.execPath) {
   const real = (p) => {
     try {
       return realpathSync(p);
@@ -55,12 +65,13 @@ export function stableNode() {
       return null;
     }
   };
-  const me = real(process.execPath);
-  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+  const me = real(execPath);
+  const keep = (p) => (isTempPath(p) ? (real(p) ?? p) : p);
+  for (const dir of (PATH || '').split(path.delimiter)) {
     const p = path.join(dir, 'node');
-    if (path.isAbsolute(p) && !p.includes('_npx') && me && real(p) === me) return p;
+    if (path.isAbsolute(p) && !p.includes('_npx') && me && real(p) === me) return keep(p);
   }
-  return process.execPath;
+  return keep(execPath);
 }
 
 // the OS ccrunway thinks it runs on; CCRUNWAY_PLATFORM is for tests only (the Linux
@@ -78,21 +89,46 @@ export function binMajor(bin) {
     return null;
   }
 }
-// the node binary a hook or status line command runs: its first quoted word
-export const cmdNode = (command) => /^"([^"]+)"/.exec(command || '')?.[1] ?? null;
+// one word for /bin/sh, in double quotes: a home folder or node path may hold a space
+const dq = (s) => `"${String(s).replace(/(["\\$`])/g, '\\$1')}"`;
+const undq = (s) => s.replace(/\\(.)/g, '$1');
+const WORD = '"((?:[^"\\\\]|\\\\.)*)"';
+// a CCRUNWAY_HOME set at install goes into the commands, so the hooks write there however
+// Claude Code was started; unset, the commands are as they always were
+export const envPrefix = () => (process.env.CCRUNWAY_HOME ? `CCRUNWAY_HOME=${dq(path.resolve(home()))} ` : '');
+const LEAD = new RegExp(`^(?:CCRUNWAY_HOME=${WORD} )?${WORD}`);
+// the node binary a hook or status line command runs: its first quoted word after the
+// optional CCRUNWAY_HOME=
+export const cmdNode = (command) => {
+  const m = LEAD.exec(command || '');
+  return m ? undq(m[2]) : null;
+};
+// the CCRUNWAY_HOME a command carries, or null
+export const cmdHome = (command) => {
+  const m = LEAD.exec(command || '');
+  return m?.[1] != null ? undq(m[1]) : null;
+};
 
 // the turn ledger needs the first two; PostToolUse sizes tool results; PreModelSwitch
 // prices a model switch before it happens
 export const EVENTS = ['UserPromptSubmit', 'Stop', 'PostToolUse', 'PreModelSwitch'];
 
-// quoted: a home folder or node path may hold a space
-const cmd = (node, file) => `"${node}" "${path.join(appDir(), file)}"`;
+const cmd = (node, file) => `${envPrefix()}${dq(node)} ${dq(path.join(appDir(), file))}`;
 export const hookCmd = (node = process.execPath) => cmd(node, 'hook.mjs');
 export const statusCmd = (node = process.execPath) => cmd(node, 'statusline.mjs');
+// the skill's command line: a `ccrunway mute` from Claude Code reaches the same home
+export const cliCmd = (node = process.execPath) => cmd(node, 'cli.mjs');
 
-const mentions = (command, file) =>
-  command.includes(path.join(appDir(), file)) ||
-  new RegExp(`\\.ccrunway/app/${file.replace('.', '\\.')}`).test(command);
+// this home's app copy, the default ~/.ccrunway/app, or any app copy a command names with
+// its CCRUNWAY_HOME baked in (an uninstall run without that variable still finds it)
+const mentions = (command, file) => {
+  const f = file.replace('.', '\\.');
+  return (
+    command.includes(path.join(appDir(), file)) ||
+    new RegExp(`\\.ccrunway/app/${f}`).test(command) ||
+    (cmdHome(command) != null && new RegExp(`/app/${f}"$`).test(command))
+  );
+};
 
 // ours: the app copy under CCRUNWAY_HOME (or the default ~/.ccrunway/app)
 export const isOurHook = (h) => mentions(h?.command || '', 'hook.mjs');
