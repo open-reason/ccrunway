@@ -44,7 +44,7 @@ npx ccrunway install --json
 {"schema":1,"ok":true,"settings":"~/.claude/settings.json",
  "backup":"~/.ccrunway/settings.2026-11-17T11-24-32-833Z.json",
  "wraps":"ccusage statusline","skill":"~/.claude/skills/ccrunway/SKILL.md",
- "app":"~/.ccrunway/app","node":"/opt/homebrew/bin/node","version":"0.3.0",
+ "app":"~/.ccrunway/app","node":"/opt/homebrew/bin/node","version":"0.4.0",
  "next_step":"open a new Claude Code session",
  "next_steps":["open a new Claude Code session","npx ccrunway doctor"]}
 ```
