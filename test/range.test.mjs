@@ -1,4 +1,4 @@
-// node --test range.test.mjs
+// node --test test/range.test.mjs
 // Synthetic meter readings for scenarios 1–3 of the range plan,
 // plus the colour edges. pace() takes the record directly, so nothing is written.
 
@@ -9,9 +9,9 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 process.env.CCRUNWAY_HOME = mkdtempSync(path.join(os.tmpdir(), 'ccrunway-range-'));
-const { P, pace } = await import('./pace.mjs');
+const { P, pace } = await import('../src/pace.mjs');
 const { AMBER_MIN, BAR_EDGES, MIN_TURNS, chatRate, clock, paceBars, range } = await import(
-  './range.mjs'
+  '../src/range.mjs'
 );
 
 const MIN = 60_000;
@@ -144,7 +144,7 @@ test('model fill: no jump over 10 min in the run-out time when the meter goes 7 
 });
 
 test('model fill: capped below the next whole percent, scaled to the meter', async () => {
-  const { fillAt, fillScale } = await import('./pace.mjs');
+  const { fillAt, fillScale } = await import('../src/pace.mjs');
   const readings = rises(RESET - 60 * MIN, 1, 5, 10); // 5% at −20 min
   // 3 points of turns since the last rise: the fill stops at 0.99
   const big = [{ start: RESET - 15 * MIN, t: RESET - 5 * MIN, pct: 3 }];

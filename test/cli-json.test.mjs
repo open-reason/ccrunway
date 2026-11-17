@@ -1,4 +1,4 @@
-// node --test cli-json.test.mjs
+// node --test test/cli-json.test.mjs
 // The agent contract of cli.mjs: --json on every command is exactly one object on stdout
 // with schema 1 and ok; errors carry {code, message, fix}; exit 2 bad usage, 3 not
 // installed; nothing asks without a terminal or under --json. Temp CCRUNWAY_HOME, temp
@@ -13,6 +13,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const src = path.join(here, '..', 'src');
 
 function env(extra = {}) {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'ccrunway json-'));
@@ -35,7 +36,7 @@ function env(extra = {}) {
   };
 }
 const run = (e, ...argv) =>
-  spawnSync(process.execPath, [path.join(here, 'cli.mjs'), ...argv], {
+  spawnSync(process.execPath, [path.join(src, 'cli.mjs'), ...argv], {
     env: e.env,
     encoding: 'utf8',
     input: '', // not a terminal

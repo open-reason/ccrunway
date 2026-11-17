@@ -1,4 +1,4 @@
-// node --test launch.test.mjs
+// node --test test/launch.test.mjs
 // Launch previews (range plan S4): the cost, the run-out time after the jump, when a
 // launch shows and when it clears, through the real hook and status line processes.
 // Temp CCRUNWAY_HOME; placeholder fixtures only.
@@ -12,11 +12,12 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 process.env.CCRUNWAY_HOME = mkdtempSync(path.join(os.tmpdir(), 'ccrunway-launch-'));
-const L = await import('./launch.mjs');
-const { w } = await import('./price.mjs');
-const { clock } = await import('./range.mjs');
+const L = await import('../src/launch.mjs');
+const { w } = await import('../src/price.mjs');
+const { clock } = await import('../src/range.mjs');
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const src = path.join(here, '..', 'src');
 const MIN = 60_000;
 const SAMPLE = JSON.parse(
   readFileSync(path.join(here, 'fixtures', 'statusline-opus-259k.json'), 'utf8'),
@@ -48,7 +49,7 @@ function home() {
   mkdirSync(path.join(dir, 'sessions'));
   const env = { ...process.env, CCRUNWAY_HOME: dir, NO_COLOR: '1' };
   const run = (script, stdin, argv = []) =>
-    spawnSync(process.execPath, [path.join(here, script), ...argv], {
+    spawnSync(process.execPath, [path.join(src, script), ...argv], {
       input: typeof stdin === 'string' ? stdin : JSON.stringify(stdin ?? {}),
       env,
       encoding: 'utf8',

@@ -1,4 +1,4 @@
-// node --test statusline.test.mjs
+// node --test test/statusline.test.mjs
 // Every test runs the real scripts in a temp CCRUNWAY_HOME.
 // Nothing here touches ~/.claude/settings.json or ~/.ccrunway.
 
@@ -11,6 +11,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const src = path.join(here, '..', 'src');
 const SAMPLE = JSON.parse(
   readFileSync(path.join(here, 'fixtures', 'statusline-opus-259k.json'), 'utf8'),
 );
@@ -28,7 +29,7 @@ function env() {
 }
 
 const run = (e, script, stdin, argv = []) => {
-  const r = spawnSync(process.execPath, [path.join(here, script), ...argv], {
+  const r = spawnSync(process.execPath, [path.join(src, script), ...argv], {
     input: typeof stdin === 'string' ? stdin : JSON.stringify(stdin ?? {}),
     env: e.env,
     encoding: 'utf8',
@@ -56,7 +57,7 @@ function snapshot(sid, { model, ctx, write = 0, cold = false, recache }) {
 
 test('price: model ids map by family then version; a 362k Fable resend ≈ 9.9 points', async () => {
   process.env.CCRUNWAY_HOME = mkdtempSync(path.join(os.tmpdir(), 'ccrunway-test-'));
-  const p = await import('./price.mjs');
+  const p = await import('../src/price.mjs');
   assert.equal(p.modelKey('claude-opus-5-5'), 'opus-5-5');
   assert.equal(p.modelKey('claude-fable-5-1'), 'fable-5-1');
   assert.equal(p.modelKey('claude-fable-5-2[1m]'), 'fable-5-2');
@@ -127,7 +128,7 @@ test('status line colours: run-out by state in brand tokens on light, terminal r
 
 test('pace: rises only, stale sessions ignored, needs 5 min, sprint at 1%/min', async () => {
   process.env.CCRUNWAY_HOME = mkdtempSync(path.join(os.tmpdir(), 'ccrunway-test-'));
-  const { observe, pace } = await import('./pace.mjs');
+  const { observe, pace } = await import('../src/pace.mjs');
   const t0 = Date.parse('2026-11-11T15:00:00Z');
   const resets = Math.floor((t0 + 4 * 3600_000) / 1000);
   const at = (min, pct) =>
@@ -224,7 +225,7 @@ test('gauges: model, chat size and 5h used lead the line; no week; big chat in a
 test('weights: the copy next to price.mjs wins (the packed layout)', () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'ccrunway-pack-'));
   for (const f of ['price.mjs', 'state.mjs'])
-    writeFileSync(path.join(dir, f), readFileSync(path.join(here, f)));
+    writeFileSync(path.join(dir, f), readFileSync(path.join(src, f)));
   writeFileSync(
     path.join(dir, 'claude-five-weights.json'),
     JSON.stringify({ models: { 'opus-5-5': { w_out: 1, w_write: 2 } } }),

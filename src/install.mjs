@@ -39,6 +39,7 @@ import {
   here,
   isOurStatus,
   nodeMajor,
+  pkgFile,
   platform,
   serialize,
   settingsPath,
@@ -142,7 +143,7 @@ writeJSON(path.join(home(), 'install.json'), {
   prevStatusLine,
   node,
   app,
-  version: readJSON(path.join(here, 'package.json'), {})?.version ?? null,
+  version: readJSON(pkgFile(), {})?.version ?? null,
   at: new Date().toISOString(),
 });
 
@@ -210,7 +211,7 @@ if (json) {
     ...(skillAt ? {} : { skill_note: skillNote.replace(/^skill: /, '') }),
     app,
     node,
-    version: readJSON(path.join(here, 'package.json'), {})?.version ?? null,
+    version: readJSON(pkgFile(), {})?.version ?? null,
     menubar,
     next_step: 'open a new Claude Code session',
     next_steps: ['open a new Claude Code session', 'npx ccrunway doctor'],

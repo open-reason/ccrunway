@@ -1,4 +1,4 @@
-// node --test drain.test.mjs
+// node --test test/drain.test.mjs
 // Range plan S3: tool result sizes, a turn's parts, the top drain across sessions, the
 // untracked case, and the big-result note. Fixtures hold placeholders, no real text.
 // Temp CCRUNWAY_HOME; nothing under ~ is touched.
@@ -19,14 +19,15 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const src = path.join(here, '..', 'src');
 const fx = (f) => path.join(here, 'fixtures', f);
 process.env.CCRUNWAY_HOME = mkdtempSync(path.join(os.tmpdir(), 'ccrunway-drain-'));
-const { closeTurn, openTurn, readLedger, readTurns } = await import('./ledger.mjs');
+const { closeTurn, openTurn, readLedger, readTurns } = await import('../src/ledger.mjs');
 const { BIG_RESULT_TOKENS, CHARS_PER_TOKEN, IMAGE_TOKENS, bigResult, noteTool, resultSize } =
-  await import('./tools.mjs');
-const { RELOAD_MIN, partsOf, split } = await import('./parts.mjs');
-const { NAME_MAX, drain, drainText, meterRise } = await import('./drain.mjs');
-const { fmtRate, paceBars, paceRate, simRate } = await import('./range.mjs');
+  await import('../src/tools.mjs');
+const { RELOAD_MIN, partsOf, split } = await import('../src/parts.mjs');
+const { NAME_MAX, drain, drainText, meterRise } = await import('../src/drain.mjs');
+const { fmtRate, paceBars, paceRate, simRate } = await import('../src/range.mjs');
 
 const MIN = 60_000;
 const close = (a, b, eps = 2e-4) => Math.abs(a - b) < eps;
@@ -406,7 +407,7 @@ test('status line: drain only when amber or red; big result for one turn, any co
   const home = mkdtempSync(path.join(os.tmpdir(), 'ccrunway-drain-e2e-'));
   const env = { ...process.env, CCRUNWAY_HOME: home, NO_COLOR: '1' };
   const run = (script, stdin, args = []) =>
-    spawnSync(process.execPath, [path.join(here, script), ...args], {
+    spawnSync(process.execPath, [path.join(src, script), ...args], {
       input: typeof stdin === 'string' ? stdin : JSON.stringify(stdin),
       env,
       encoding: 'utf8',
@@ -533,7 +534,7 @@ test('hook.mjs PostToolUse never breaks: no session, no response, bad input → 
     '{"hook_event_name":"PostToolUse","session_id":"s","tool_name":"Read","tool_response":null}',
     'not json',
   ]) {
-    const r = spawnSync(process.execPath, [path.join(here, 'hook.mjs')], {
+    const r = spawnSync(process.execPath, [path.join(src, 'hook.mjs')], {
       input,
       env,
       encoding: 'utf8',

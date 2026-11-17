@@ -1,4 +1,4 @@
-// node --test pending.test.mjs
+// node --test test/pending.test.mjs
 // Pending spend (ledger.mjs pendingSpend): a chat's spend the hook has not booked yet,
 // priced read only until the next Stop (or catch-up) books it: a background helper's after
 // its chat's Stop, and the chat's own calls while a turn runs, split into parts as the
@@ -22,10 +22,11 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const src = path.join(here, '..', 'src');
 const fx = (f) => path.join(here, 'fixtures', f);
 process.env.CCRUNWAY_HOME = mkdtempSync(path.join(os.tmpdir(), 'ccrunway-pending-'));
-const L = await import('./ledger.mjs');
-const { claudePace } = await import('./menubar/claude-read.mjs');
+const L = await import('../src/ledger.mjs');
+const { claudePace } = await import('../src/menubar/claude-read.mjs');
 
 const MIN = 60_000;
 const close = (a, b) => Math.abs(a - b) < 1e-4;
@@ -190,7 +191,7 @@ test('a running helper reads as its chat`s helpers, not outside Claude Code (sta
   snap.session_id = sid;
   snap.session_name = 'Placeholder chat'; // the status line writes it to sessions/<sid>.json
   snap.rate_limits.five_hour = { used_percentage: 60, resets_at: reset };
-  const out = spawnSync(process.execPath, [path.join(here, 'statusline.mjs')], {
+  const out = spawnSync(process.execPath, [path.join(src, 'statusline.mjs')], {
     input: JSON.stringify(snap),
     env: { ...process.env, CCRUNWAY_HOME: home, NO_COLOR: '1' },
     encoding: 'utf8',
@@ -310,7 +311,7 @@ test('a running single-prompt turn reads as its chat`s spend (status line, menu 
     snap.session_id = sid;
     snap.session_name = 'Running chat';
     snap.rate_limits.five_hour = { used_percentage: 60, resets_at: reset };
-    const out = spawnSync(process.execPath, [path.join(here, 'statusline.mjs')], {
+    const out = spawnSync(process.execPath, [path.join(src, 'statusline.mjs')], {
       input: JSON.stringify(snap),
       env: { ...process.env, CCRUNWAY_HOME: home, NO_COLOR: '1' },
       encoding: 'utf8',

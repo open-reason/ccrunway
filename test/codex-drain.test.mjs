@@ -1,4 +1,4 @@
-// node --test codex-drain.test.mjs
+// node --test test/codex-drain.test.mjs
 // The top drain, outside spend and cold resume in the menu bar (codex-pace.mjs codexParts,
 // withDrain; drain.mjs with CODEX labels; codex-sessions.mjs `reads`, `cold`, `open`;
 // menubar/menubar.mjs drainRow; menubar/claude-read.mjs).
@@ -18,16 +18,17 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const src = path.join(here, '..', 'src');
 const fixtures = path.join(here, 'fixtures');
 const fresh = (tag) => mkdtempSync(path.join(os.tmpdir(), `ccrunway-drain-${tag}-`));
 process.env.CCRUNWAY_HOME = fresh('home');
 
-const S = await import('./codex-sessions.mjs');
-const C = await import('./codex-pace.mjs');
-const { drain, CODEX } = await import('./drain.mjs');
-const { drainRow, section, codexHelper, simulated } = await import('./menubar/menubar.mjs');
-const { codexRange } = await import('./codex-range.mjs');
-const { writeJSON } = await import('./state.mjs');
+const S = await import('../src/codex-sessions.mjs');
+const C = await import('../src/codex-pace.mjs');
+const { drain, CODEX } = await import('../src/drain.mjs');
+const { drainRow, section, codexHelper, simulated } = await import('../src/menubar/menubar.mjs');
+const { codexRange } = await import('../src/codex-range.mjs');
+const { writeJSON } = await import('../src/state.mjs');
 
 const MIN = 60_000;
 const NOV07 = path.join(
@@ -333,7 +334,7 @@ test('big reads: a tool result is input to the call after the one that asked for
 
 test('replay: the CLI prints the Codex section as of --at; --sim forces a verdict', () => {
   const run = (...a) =>
-    execFileSync(process.execPath, [path.join(here, 'codex-pace.mjs'), '--replay', ...a], {
+    execFileSync(process.execPath, [path.join(src, 'codex-pace.mjs'), '--replay', ...a], {
       env: process.env,
       encoding: 'utf8',
     });
@@ -353,7 +354,7 @@ test('replay: the CLI prints the Codex section as of --at; --sim forces a verdic
 test('claude-read: the status line drain with the chat name; outside with no chats', async () => {
   const home = fresh('claude');
   process.env.CCRUNWAY_HOME = home;
-  const { claudePace } = await import('./menubar/claude-read.mjs');
+  const { claudePace } = await import('../src/menubar/claude-read.mjs');
   const now = Date.now();
   const reset = now + 3 * 60 * MIN;
   mkdirSync(path.join(home, 'sessions'), { recursive: true });

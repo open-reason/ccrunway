@@ -16,12 +16,12 @@ import path from 'node:path';
 import { doctor, doctorText } from './doctor.mjs';
 import { clockNow, filterChats, nowReport, nowText, worstExit } from './now.mjs';
 import { clock, isoLocal } from './range.mjs';
-import { here, isOurHook, isOurStatus, settingsPath } from './settings.mjs';
+import { here, isOurHook, isOurStatus, pkgFile, settingsPath } from './settings.mjs';
 import { home, mutedUntil, readConfig, readJSON, writeConfig } from './state.mjs';
 import { menubarOff, menubarOn, menubarState } from './swiftbar.mjs';
 import { latestVersion, newer } from './update.mjs';
 
-const VERSION = readJSON(path.join(here, 'package.json'), {})?.version ?? '?';
+const VERSION = readJSON(pkgFile(), {})?.version ?? '?';
 const SCHEMA = 1;
 
 const F = {

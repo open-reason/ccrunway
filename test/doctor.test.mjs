@@ -1,4 +1,4 @@
-// node --test doctor.test.mjs
+// node --test test/doctor.test.mjs
 // `ccrunway doctor` against an install into temp settings and a temp CCRUNWAY_HOME, with
 // pace.json, a turn ledger and a status-line snapshot written as now.test.mjs writes them;
 // SwiftBar under CCRUNWAY_SB_ROOT. Nothing here touches ~/.claude or ~/.ccrunway.
@@ -12,6 +12,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const src = path.join(here, '..', 'src');
 const MIN = 60_000;
 
 function env(extra = {}) {
@@ -32,7 +33,7 @@ function env(extra = {}) {
   };
 }
 const cli = (e, ...argv) =>
-  spawnSync(process.execPath, [path.join(here, 'cli.mjs'), ...argv, '--settings', e.settings], {
+  spawnSync(process.execPath, [path.join(src, 'cli.mjs'), ...argv, '--settings', e.settings], {
     env: e.env,
     encoding: 'utf8',
     input: '',
@@ -257,7 +258,7 @@ test('doctor: no session snapshot yet skips wrapped, not required', () => {
 test('doctor: SwiftBar closed is menubar_running false, a warning; SwiftBar gone fails menubar', () => {
   const e = installed();
   mkdirSync(path.join(e.env.CCRUNWAY_SB_ROOT, 'Applications', 'SwiftBar.app'), { recursive: true });
-  const on = spawnSync(process.execPath, [path.join(here, 'cli.mjs'), 'menubar', 'on'], { env: e.env, encoding: 'utf8', input: '' });
+  const on = spawnSync(process.execPath, [path.join(src, 'cli.mjs'), 'menubar', 'on'], { env: e.env, encoding: 'utf8', input: '' });
   assert.equal(on.status, 0, on.stdout + on.stderr);
   let d = doctor(e);
   assert.equal(d.by.menubar.ok, true);
