@@ -68,7 +68,7 @@ import {
 } from './ledger.mjs';
 import { P, fillScale, observe as observePace, pace as paceNow } from './pace.mjs';
 import { CALIBRATE, ctxTokens, fmtK, ms, observe } from './price.mjs';
-import { chatRate, clock, fmtRate, range, simRate, spareAt } from './range.mjs';
+import { chatRate, clock, fmtRate, range, simRate, spareAt, verdictWords } from './range.mjs';
 import {
   applySim,
   home,
@@ -112,12 +112,6 @@ const INDENT = '\u2800'.repeat('ccrunway '.length);
 let line = `${LABEL}${bar(null)}${C.muted(' · checking…')}`;
 let second = ''; // the top drain, on its own line (scenarios 4 and 8)
 
-// 40 min, 1h 10m
-const span = (m) => {
-  const n = Math.max(1, Math.round(m));
-  return n < 60 ? `${n} min` : `${Math.floor(n / 60)}h${n % 60 ? ` ${n % 60}m` : ''}`;
-};
-
 // the gauges, before the verdict: model · chat size · 5h used. Muted; the chat turns
 // amber over BIG_CHAT tokens.
 const BIG_CHAT = 150_000;
@@ -136,16 +130,13 @@ function gauges(live) {
 // `5h NN%` gauge just before it is its subject. Green and amber show the spare: the
 // share of the limit left at the reset at this pace, like an EV's arrival charge.
 // meter: the 5-hour % now.
+// The words are range.mjs verdictWords, shared with `ccrunway now`.
 function message(r, meter, now) {
   const reset = r.resetsAt ? clock(r.resetsAt, SECONDS) : null;
-  if (r.state === 'cold') return C.muted(`checking…${reset ? ` · resets ${reset}` : ''}`);
-  if (r.state === 'red') {
-    const early = span((r.resetsAt - r.runOutAt) / 60_000);
-    return C.danger(`✗ runs out ${clock(r.runOutAt)}, ${early} early`);
-  }
   // the same rate as the run-out time: all of what is left is used by runOutAt
-  const at = reset ? ` · ~${spareAt(r, meter, now)}% spare at ${reset}` : '';
-  return r.state === 'amber' ? C.warning(`⚠ tight${at}`) : C.accent(`✓ on track${at}`);
+  const spare = r.state === 'green' || r.state === 'amber' ? spareAt(r, meter, now) : null;
+  const tint = { red: C.danger, amber: C.warning, green: C.accent }[r.state] ?? C.muted;
+  return tint(verdictWords(r, spare, reset));
 }
 
 // · pace ▮▮▮▯  12%/h; n null: · pace ▯▯▯▯   –%/h. The rate is right-aligned in RATE_W

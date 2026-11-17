@@ -57,6 +57,33 @@ export function clock(t, seconds = false) {
   return `${h % 12 || 12}:${pad(d.getMinutes())}${s}${h < 12 ? 'am' : 'pm'}`;
 }
 
+// ISO 8601 with the local offset, for `--json`: 2026-11-17T14:30:00+01:00. toISOString()
+// gives UTC with a Z, which an agent then has to convert before saying it to the user
+export function isoLocal(t) {
+  if (t == null || !Number.isFinite(+t)) return null;
+  const d = new Date(+t);
+  const pad = (n) => String(Math.floor(Math.abs(n))).padStart(2, '0');
+  const off = -d.getTimezoneOffset();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}${off < 0 ? '-' : '+'}${pad(off / 60)}:${pad(off % 60)}`;
+}
+
+// 40 min, 1h 10m
+export const span = (m) => {
+  const n = Math.max(1, Math.round(m));
+  return n < 60 ? `${n} min` : `${Math.floor(n / 60)}h${n % 60 ? ` ${n % 60}m` : ''}`;
+};
+
+// the status line's verdict words, uncoloured (statusline.mjs colours them by state;
+// `ccrunway now` repeats them as its summary, so an agent can say what the user sees).
+// r: range()'s result; spare: spareAt()'s, used on green and amber; reset: the reset
+// already formatted (the status line adds seconds in debug), or null
+export function verdictWords(r, spare, reset = r?.resetsAt ? clock(r.resetsAt) : null) {
+  if (!r || r.state === 'cold') return `checking…${reset ? ` · resets ${reset}` : ''}`;
+  if (r.state === 'red') return `✗ runs out ${clock(r.runOutAt)}, ${span((r.resetsAt - r.runOutAt) / MIN)} early`;
+  const at = reset && spare != null ? ` · ~${spare}% spare at ${reset}` : '';
+  return r.state === 'amber' ? `⚠ tight${at}` : `✓ on track${at}`;
+}
+
 // Pace of one chat (S2, one rule since 2026-11-13): how hard it is pushing against the
 // pace that lands exactly on the reset. 4 bars; the 3rd is on pace. The status line's
 // pace bar and the menu bar's Claude chat rows both use chatRate(), so they agree.

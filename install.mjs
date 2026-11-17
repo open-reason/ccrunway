@@ -13,7 +13,9 @@
 // - re-running is idempotent: our old entries are removed before the new ones go in, and
 //   uninstall keeps pointing at the first backup and the first saved statusLine
 // --dry-run prints the resulting settings JSON and writes nothing. --node <absolute path>
-// picks the node the hooks run with (default: this one, by its PATH name).
+// picks the node the hooks run with (default: this one, by its PATH name). --json prints
+// one object instead of the text (cli.mjs has the contract); --dry-run --json puts the
+// settings under settings_after.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -31,10 +33,21 @@ import {
 import { home, readJSON, writeJSON } from './state.mjs';
 
 const opt = args(process.argv.slice(2));
+const json = opt.json === true;
+const emit = (obj) => process.stdout.write(`${JSON.stringify({ schema: 1, ok: true, ...obj })}\n`);
 const file = settingsPath(opt);
 const existed = existsSync(file);
 const text = existed ? readFileSync(file, 'utf8') : '{}\n';
-const settings = JSON.parse(text);
+let settings;
+try {
+  settings = JSON.parse(text);
+} catch (e) {
+  const message = `can't read ${file} as JSON: ${e.message}`;
+  if (json)
+    emit({ ok: false, error: { code: 'SETTINGS_UNREADABLE', message, fix: `fix the JSON in ${file}` } });
+  else process.stderr.write(`${message}\n`);
+  process.exit(1);
+}
 const meta = readJSON(path.join(home(), 'install.json'), null);
 const again = isOurStatus(settings.statusLine) && meta?.settingsPath === file;
 
@@ -46,7 +59,8 @@ const node = typeof opt.node === 'string' && path.isAbsolute(opt.node) ? opt.nod
 const next = addRunway(stripHooks(structuredClone(settings)), node);
 
 if (opt['dry-run']) {
-  process.stdout.write(serialize(next));
+  if (json) emit({ dry_run: true, settings: file, settings_after: next });
+  else process.stdout.write(serialize(next));
   process.exit(0);
 }
 
@@ -78,10 +92,12 @@ writeJSON(path.join(home(), 'install.json'), {
 const skillDir = path.join(path.dirname(file), 'skills', 'ccrunway');
 const skillFile = path.join(skillDir, 'SKILL.md');
 let skillNote = `skill: ${skillFile}`;
+let skillAt = skillFile;
 try {
   const prev = existsSync(skillFile) ? readFileSync(skillFile, 'utf8') : null;
   if (existsSync(skillDir) && !/^name: ccrunway$/m.test(prev || '')) {
     skillNote = `skill: ${skillDir} exists and is not ccrunway's; left alone`;
+    skillAt = null;
   } else {
     const body = readFileSync(path.join(here, 'skill', 'SKILL.md'), 'utf8').replaceAll(
       '{{CLI}}',
@@ -92,9 +108,24 @@ try {
   }
 } catch {
   skillNote = 'skill: could not write it; Claude Code will not know the ccrunway commands';
+  skillAt = null;
 }
 
 const wrapped = prevStatusLine?.command;
+if (json) {
+  emit({
+    settings: file,
+    backup,
+    wraps: wrapped ?? null,
+    skill: skillAt,
+    ...(skillAt ? {} : { skill_note: skillNote.replace(/^skill: /, '') }),
+    app,
+    node,
+    version: readJSON(path.join(here, 'package.json'), {})?.version ?? null,
+    next_step: 'open a new Claude Code session',
+  });
+  process.exit(0);
+}
 process.stdout.write(
   [
     ...lines,

@@ -294,16 +294,22 @@ test('wrap: no earlier status line → only ours; a failing or hanging one → o
 test('cli: mute shows `muted until`, unmute brings the line back; debug on adds the meter age', () => {
   const e = env();
   const snap = snapshot('m1', { model: 'Opus 5.5', ctx: 60_000 });
-  assert.match(run(e, 'cli.mjs', '', ['mute', '30m']).stdout, /^ccrunway muted until \d/);
+  // mute, unmute and debug change only the status line: they need it installed
+  const settings = path.join(e.dir, 'settings.json');
+  const cli = (...a) => run(e, 'cli.mjs', '', [...a, '--settings', settings]);
+  assert.equal(cli('mute', '30m').status, 3);
+  const line = `"${process.execPath}" "${path.join(e.dir, 'app', 'statusline.mjs')}"`;
+  writeFileSync(settings, JSON.stringify({ statusLine: { type: 'command', command: line } }));
+  assert.match(cli('mute', '30m').stdout, /^ccrunway muted until \d/);
   assert.match(run(e, 'statusline.mjs', snap).stdout, /^ccrunway · muted until \d{1,2}:\d\d[ap]m\n$/);
   assert.ok(existsSync(path.join(e.dir, 'sessions', 'm1.json')), 'still records while muted');
-  assert.equal(JSON.parse(run(e, 'cli.mjs', '', ['status', '--json']).stdout).muted_until != null, true);
-  run(e, 'cli.mjs', '', ['unmute']);
+  assert.equal(JSON.parse(cli('status', '--json').stdout).muted_until != null, true);
+  cli('unmute');
   assert.match(run(e, 'statusline.mjs', snap).stdout, /^ccrunway · pace /);
-  run(e, 'cli.mjs', '', ['debug', 'on']);
+  cli('debug', 'on');
   assert.match(run(e, 'statusline.mjs', snap).stdout, / · meter \d+s old\n$/);
-  const st = JSON.parse(run(e, 'cli.mjs', '', ['status', '--json']).stdout);
+  const st = JSON.parse(cli('status', '--json').stdout);
   assert.equal(st.debug, true);
   assert.equal(st.muted_until, null);
-  assert.equal(run(e, 'cli.mjs', '', ['mute', 'soon']).status, 1);
+  assert.equal(cli('mute', 'soon').status, 2);
 });

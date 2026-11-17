@@ -7,7 +7,8 @@
 //   - SwiftBar missing: offers `brew install --cask swiftbar` when brew is on the PATH, else
 //     downloads the pinned release below into ~/Applications and checks its SHA-256 (a
 //     mismatch installs nothing). Asks first on a terminal; --yes answers for you, and
-//     without a terminal or --yes nothing is installed. A LaunchAgent opens a SwiftBar we
+//     without a terminal or --yes, or under --json (which never asks), nothing is
+//     installed and the failure's code is NEEDS_CONFIRM. A LaunchAgent opens a SwiftBar we
 //     installed at login (SwiftBar's own "Launch at login" can only be set from the app)
 //   - SwiftBar has a plugin folder: a link to our plugin goes in beside the user's own
 //     plugins, never over a file of theirs. It has none: the folder becomes
@@ -108,11 +109,13 @@ export function running() {
   return spawnSync('pgrep', ['-xq', 'SwiftBar']).status === 0;
 }
 
-// open, pkill, launchctl, brew: run, or under the test root printed and simulated
-function act(out, cmd, argv) {
+// open, pkill, launchctl, brew: run, or under the test root printed and simulated.
+// toStderr: under --json stdout holds one JSON object, so brew's progress goes to stderr
+function act(out, cmd, argv, toStderr = false) {
   const brew = path.basename(cmd) === 'brew';
   // brew's own progress shows; the rest is quiet
-  if (!ROOT) return spawnSync(cmd, argv, { stdio: brew ? 'inherit' : 'ignore' }).status === 0;
+  const shown = toStderr ? ['ignore', 2, 2] : 'inherit';
+  if (!ROOT) return spawnSync(cmd, argv, { stdio: brew ? shown : 'ignore' }).status === 0;
   out(`  (test) ${cmd} ${argv.join(' ')}`);
   if (cmd === 'open') writeFileSync(path.join(ROOT, 'running'), '');
   if (cmd === 'pkill') rmSync(path.join(ROOT, 'running'), { force: true });
@@ -140,9 +143,10 @@ export function brewPath() {
   return null;
 }
 
-function ask(question, yes) {
+// true, false (answered no), or null: no one to ask (no terminal, or prompt off for --json)
+function ask(question, yes, prompt = true) {
   if (yes) return true;
-  if (!process.stdin.isTTY) return false;
+  if (!prompt || !process.stdin.isTTY) return null;
   process.stdout.write(`${question} [Y/n] `);
   const buf = Buffer.alloc(256);
   let n = 0;
@@ -164,16 +168,24 @@ function macosMajor() {
   }
 }
 
-// → { app, by: 'brew' | 'download' } or null, with what happened in out()
-function installSwiftBar(out, yes) {
+// a failure's code for --json: why, and the command that would get past it
+const why = (info, code, fix = null) => Object.assign(info, { code, fix });
+const declined = (answer) => (answer === null ? 'NEEDS_CONFIRM' : 'DECLINED');
+
+// → { app, by: 'brew' | 'download' } or null, with what happened in out() and, on null,
+// the reason in info ({ code, fix })
+function installSwiftBar(out, yes, prompt, info) {
   const brew = brewPath();
   if (brew) {
-    if (!ask('SwiftBar draws the menu bar item. Install it with `brew install --cask swiftbar`?', yes)) {
+    const a = ask('SwiftBar draws the menu bar item. Install it with `brew install --cask swiftbar`?', yes, prompt);
+    if (!a) {
       out('menu bar not set up: SwiftBar is needed. Run `brew install --cask swiftbar`, or `ccrunway menubar on --yes`');
+      why(info, declined(a), 'ccrunway menubar on --yes');
       return null;
     }
-    if (!act(out, brew, ['install', '--cask', 'swiftbar']) || !swiftbarApp()) {
+    if (!act(out, brew, ['install', '--cask', 'swiftbar'], !prompt) || !swiftbarApp()) {
       out('menu bar not set up: `brew install --cask swiftbar` failed');
+      why(info, 'SWIFTBAR_INSTALL_FAILED', 'brew install --cask swiftbar');
       return null;
     }
     out(`SwiftBar installed with Homebrew: ${tilde(swiftbarApp())}`);
@@ -181,11 +193,14 @@ function installSwiftBar(out, yes) {
   }
   if (macosMajor() < 12) {
     out(`menu bar not set up: SwiftBar ${SWIFTBAR.version} needs macOS 12 or newer`);
+    why(info, 'MACOS_TOO_OLD');
     return null;
   }
   const { url, sha256 } = download();
-  if (!ask(`SwiftBar draws the menu bar item. Download SwiftBar ${SWIFTBAR.version} from github.com/swiftbar/SwiftBar into ~/Applications?`, yes)) {
+  const a = ask(`SwiftBar draws the menu bar item. Download SwiftBar ${SWIFTBAR.version} from github.com/swiftbar/SwiftBar into ~/Applications?`, yes, prompt);
+  if (!a) {
     out('menu bar not set up: SwiftBar is needed. Run `ccrunway menubar on --yes` to download it');
+    why(info, declined(a), 'ccrunway menubar on --yes');
     return null;
   }
   const tmp = mkdtempSync(path.join(os.tmpdir(), 'ccrunway-swiftbar-'));
@@ -196,11 +211,13 @@ function installSwiftBar(out, yes) {
       execFileSync('curl', ['-fsSL', '-m', '180', url, '-o', zip], { stdio: 'ignore' });
     } catch {
       out(`menu bar not set up: could not download SwiftBar (${url})`);
+      why(info, 'SWIFTBAR_DOWNLOAD_FAILED', 'ccrunway menubar on --yes');
       return null;
     }
     const got = createHash('sha256').update(readFileSync(zip)).digest('hex');
     if (got !== sha256) {
       out(`menu bar not set up: the SwiftBar download's SHA-256 is ${got}, expected ${sha256}. Nothing was installed.`);
+      why(info, 'SWIFTBAR_CHECKSUM_MISMATCH');
       return null;
     }
     try {
@@ -211,6 +228,7 @@ function installSwiftBar(out, yes) {
     } catch {
       rmSync(dest, { recursive: true, force: true });
       out('menu bar not set up: could not unpack SwiftBar into ~/Applications');
+      why(info, 'SWIFTBAR_INSTALL_FAILED');
       return null;
     }
     out(`SwiftBar ${SWIFTBAR.version} installed in ~/Applications (SHA-256 checked)`);
@@ -241,10 +259,12 @@ function writeAgent(app) {
   return file;
 }
 
-// → exit code; lines through out()
-export function menubarOn({ yes = false, out = console.log } = {}) {
+// → exit code; lines through out(). prompt false (--json): never ask. info gets the
+// failure's { code, fix } when it returns 1
+export function menubarOn({ yes = false, out = console.log, prompt = true, info = {} } = {}) {
   if (!ROOT && process.platform !== 'darwin') {
     out('menu bar not set up: SwiftBar is macOS only');
+    why(info, 'NOT_MACOS');
     return 1;
   }
   copyApp();
@@ -253,7 +273,7 @@ export function menubarOn({ yes = false, out = console.log } = {}) {
   rec.node = readJSON(path.join(home(), 'install.json'), null)?.node || stableNode();
   let app = swiftbarApp();
   if (!app) {
-    const got = installSwiftBar(out, yes);
+    const got = installSwiftBar(out, yes, prompt, info);
     if (!got) return 1;
     app = got.app;
     rec.installedBy = got.by;
@@ -268,10 +288,12 @@ export function menubarOn({ yes = false, out = console.log } = {}) {
     link = path.join(folder, PLUGIN);
     if (!existsSync(folder)) {
       out(`menu bar not set up: SwiftBar's plugin folder ${tilde(folder)} does not exist`);
+      why(info, 'PLUGIN_FOLDER_MISSING');
       return 1;
     }
     if ((existsSync(link) || isLink(link)) && !ours(link)) {
       out(`menu bar not set up: ${tilde(link)} is already there and is not ccrunway's; left it alone`);
+      why(info, 'PLUGIN_FILE_TAKEN');
       return 1;
     }
   } else {

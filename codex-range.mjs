@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { codexSpends, readingsOf } from './codex-pace.mjs';
 import { readCodex } from './codex-sessions.mjs';
 import { pace } from './pace.mjs';
-import { clock24, range, spareAt } from './range.mjs';
+import { clock24, range, spareAt, span } from './range.mjs';
 
 const MIN = 60_000;
 
@@ -48,10 +48,7 @@ export const codexRange = (data, now = Date.now()) =>
   verdictOf(readingsOf(data?.meters), codexSpends(data), now);
 
 // 40 min, 1h 10m (as the status line)
-export const span = (m) => {
-  const n = Math.max(1, Math.round(m));
-  return n < 60 ? `${n} min` : `${Math.floor(n / 60)}h${n % 60 ? ` ${n % 60}m` : ''}`;
-};
+export { span };
 
 // the pace line's short form: `out 14:30` / `~3% spare`; '' when cold
 export function verdictShort(v) {
