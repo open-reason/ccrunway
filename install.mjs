@@ -14,10 +14,15 @@
 // - writes the `ccrunway` skill next to the settings file (skills/ccrunway/SKILL.md)
 // - re-running is idempotent: our old entries are removed before the new ones go in, and
 //   uninstall keeps pointing at the first backup and the first saved statusLine
+// - turns the menu bar item on (swiftbar.mjs), installing SwiftBar if it is missing: on a
+//   terminal after one question (Enter = yes); under --json or without a terminal it goes
+//   ahead, as `menubar on --yes` would. A failure there is reported in `menubar` and the
+//   install still succeeds: settings are already written. --no-menubar skips it all; so
+//   does an OS other than macOS
 // --dry-run prints the resulting settings JSON and writes nothing. --node <absolute path>
 // picks the node the hooks run with (default: this one, by its PATH name). --json prints
 // one object instead of the text (cli.mjs has the contract); --dry-run --json puts the
-// settings under settings_after.
+// settings under settings_after and what the menu bar step would do under menubar_would.
 // Preflight, before any write (the data folder included) and on --dry-run too: macOS
 // (UNSUPPORTED_OS; --force installs anyway, untested), node 20+ here (NODE_TOO_OLD) and
 // at --node (BAD_NODE), settings.json readable as JSON (SETTINGS_UNREADABLE).
@@ -41,6 +46,7 @@ import {
   stripHooks,
 } from './settings.mjs';
 import { home, readJSON, writeJSON } from './state.mjs';
+import { ask, menubarOn, swiftbarApp } from './swiftbar.mjs';
 
 const opt = args(process.argv.slice(2));
 const json = opt.json === true;
@@ -103,9 +109,16 @@ if (isOurStatus(prevStatusLine)) prevStatusLine = again ? (meta.prevStatusLine ?
 const node = opt.node ?? stableNode();
 const next = addRunway(stripHooks(structuredClone(settings)), node);
 
+const menubarSkip = opt['no-menubar'] ? 'skipped (--no-menubar)' : platform() !== 'darwin' ? 'macOS only' : null;
+
 if (opt['dry-run']) {
-  if (json) emit({ dry_run: true, settings: file, settings_after: next });
-  else process.stdout.write(serialize(next));
+  const would = menubarSkip ? 'skip' : swiftbarApp() ? 'on' : 'install SwiftBar and turn on';
+  if (json) emit({ dry_run: true, settings: file, settings_after: next, menubar_would: would });
+  else {
+    process.stdout.write(serialize(next));
+    // stdout holds only the settings
+    process.stderr.write(`menu bar: would ${would === 'skip' ? `skip it (${menubarSkip})` : would}\n`);
+  }
   process.exit(0);
 }
 
@@ -115,16 +128,16 @@ mkdirSync(home(), { recursive: true });
 // the code, copied next to the data
 const app = copyApp();
 
-
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const backup = path.join(home(), `settings.${stamp}.json`);
 writeFileSync(backup, text);
 mkdirSync(path.dirname(file), { recursive: true });
 writeFileSync(file, serialize(next));
+// a re-install keeps pointing uninstall at the pre-install backup
+const restores = again && meta.backup ? meta.backup : backup;
 writeJSON(path.join(home(), 'install.json'), {
   settingsPath: file,
-  // a re-install keeps pointing uninstall at the pre-install backup
-  backup: again && meta.backup ? meta.backup : backup,
+  backup: restores,
   existed: again && meta.existed != null ? meta.existed : existed,
   prevStatusLine,
   node,
@@ -153,23 +166,36 @@ try {
   skillAt = null;
 }
 
-// the menu bar item, when SwiftBar is already on this Mac: nothing is downloaded here
-// (`menubar on` asks before installing SwiftBar). With a plugin folder our link goes in
-// beside the user's plugins; with none, SwiftBar gets ccrunway's own folder, so no one
-// else's setup changes. --no-menubar skips it; `menubar off` removes it.
-let menubar = { on: false, detail: null, hint: 'npx ccrunway menubar on' };
-if (opt['no-menubar']) menubar.detail = 'skipped (--no-menubar)';
-else {
-  const sb = await import('./swiftbar.mjs');
-  if (!sb.swiftbarApp()) menubar.detail = 'SwiftBar is not installed; `npx ccrunway menubar on` installs it after asking';
+// the menu bar item. With a plugin folder our link goes in beside the user's plugins; with
+// none, SwiftBar gets ccrunway's own folder, so no one else's setup changes. SwiftBar
+// missing: one question on a terminal, none under --json or without one (decided: install
+// means the menu bar too; --no-menubar is the way out). `menubar off` removes it.
+let menubar = { on: false, detail: menubarSkip, code: null, hint: 'npx ccrunway menubar on' };
+if (!menubarSkip) {
+  const tty = !json && process.stdin.isTTY;
+  const yes = swiftbarApp() || !tty ? true : ask('Install SwiftBar for the menu bar item?', false);
+  if (!yes) menubar = { ...menubar, detail: 'you said no to installing SwiftBar', code: 'DECLINED' };
   else {
     const said = [];
     const info = {};
-    const code = sb.menubarOn({ yes: false, prompt: false, out: (l) => said.push(l), info });
+    // prompt off under --json: brew's progress goes to stderr, stdout keeps one object
+    const code = menubarOn({ yes: true, prompt: !json, out: (l) => said.push(l), info });
     menubar =
       code === 0
-        ? { on: true, detail: said[0]?.replace(/^menu bar: /, '') ?? null, hint: 'npx ccrunway menubar off' }
-        : { on: false, detail: said.join('; ') || info.code || 'not set up', hint: 'npx ccrunway menubar on' };
+        ? {
+            on: true,
+            detail: said.find((l) => l.startsWith('menu bar: '))?.slice(10) ?? null,
+            code: null,
+            hint: 'npx ccrunway menubar off',
+          }
+        : {
+            on: false,
+            detail:
+              said.findLast((l) => l.startsWith('menu bar not set up: '))?.slice(21) ?? (said.join('; ') || 'not set up'),
+            code: info.code ?? 'FAILED',
+            hint: info.fix ?? 'npx ccrunway menubar on',
+          };
+    if (info.installed) menubar.swiftbar_installed = info.installed;
   }
 }
 
@@ -178,6 +204,7 @@ if (json) {
   emit({
     settings: file,
     backup,
+    restores,
     wraps: wrapped ?? null,
     skill: skillAt,
     ...(skillAt ? {} : { skill_note: skillNote.replace(/^skill: /, '') }),
@@ -194,12 +221,17 @@ process.stdout.write(
   [
     ...lines,
     `ccrunway installed in ${file}`,
-    `backup: ${backup}`,
+    restores === backup ? `backup: ${backup}` : `backup: ${backup} (uninstall restores the first one: ${restores})`,
     wrapped ? `your status line stays on top: ${wrapped}` : 'no earlier status line to wrap',
     skillNote,
+    ...(menubar.swiftbar_installed
+      ? [`SwiftBar installed (${menubar.swiftbar_installed === 'brew' ? 'Homebrew' : 'download, SHA-256 checked'}); it opens at login`]
+      : []),
     menubar.on
       ? `menu bar: on (${menubar.detail}); \`npx ccrunway menubar off\` removes it`
-      : `menu bar: off (${menubar.detail}); \`npx ccrunway menubar on\` adds it`,
+      : menubar.code
+        ? `menu bar: not set up (${menubar.detail}); the rest is installed. \`${menubar.hint}\` retries`
+        : `menu bar: off (${menubar.detail}); \`npx ccrunway menubar on\` adds it`,
     'open a new Claude Code session to see the runway line',
     'check it: npx ccrunway doctor',
     '',

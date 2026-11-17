@@ -28,6 +28,7 @@ command, flag and exit code. Changes apply on the next status line refresh, no r
 | "put it in the menu bar" / "show Codex too" | `menubar on` (see rules) |
 | "remove the menu bar item" | `menubar off` |
 | "remove ccrunway" / "uninstall it" | `uninstall` |
+| "update ccrunway" / "is there a new version?" | `update` (`update --check` only reports) |
 
 ## Answering from `now --json`
 
@@ -54,7 +55,8 @@ failing required check names its fix; re-running install fixes most of them.
 - Run only what the user asked for. Never mute or uninstall ccrunway on your own initiative.
 - Prefer `mute` when the user wants quiet for a while; `uninstall` only on an explicit request.
 - Never run `uninstall --purge`, `install --force` or `menubar on --yes` without the user's
-  OK. `menubar on` may install SwiftBar (Homebrew, or a download from GitHub); under `--json`
+  OK. `update` re-runs install, which turns the menu bar item on and installs SwiftBar if it is
+  missing; add `--no-menubar` if the user doesn't want that. `menubar on` may install SwiftBar (Homebrew, or a download from GitHub); under `--json`
   it fails with `NEEDS_CONFIRM` instead of asking: tell the user, and add `--yes` only after
   they agree.
 - Don't edit ccrunway's entries in settings.json by hand.

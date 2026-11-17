@@ -62,6 +62,7 @@ const write = (file, obj) => {
   return text;
 };
 const read = (file) => JSON.parse(readFileSync(file, 'utf8'));
+const j = (r) => JSON.parse(r.stdout);
 const cmds = (s) =>
   Object.values(s.hooks || {})
     .flat()
@@ -165,6 +166,21 @@ test('install → uninstall gives byte-identical settings; re-install is idempot
   assert.equal(JSON.parse(cli(e, 'status', '--json').stdout).installed, false);
 });
 
+test('re-install: the backup line names the new backup and the one uninstall restores', () => {
+  const e = env();
+  write(e.settings, theirs());
+  const first = j(cli(e, 'install', '--json'));
+  assert.equal(first.restores, first.backup, 'first install: the same file');
+  const line = cli(e, 'install').stdout.split('\n').find((l) => l.startsWith('backup: '));
+  assert.ok(line.endsWith(` (uninstall restores the first one: ${first.backup})`), line);
+  assert.notEqual(line, `backup: ${first.backup} (uninstall restores the first one: ${first.backup})`);
+  const again = j(cli(e, 'install', '--json'));
+  assert.notEqual(again.backup, first.backup);
+  assert.ok(existsSync(again.backup));
+  assert.equal(again.restores, first.backup);
+  assert.equal(read(path.join(e.home, 'install.json')).backup, first.backup);
+});
+
 test('no settings file and no status line: install wraps nothing, uninstall removes the file again', () => {
   const e = env();
   const r = cli(e, 'install');
@@ -206,7 +222,6 @@ test('the installed copy prints the wrapped line, then ours, from its own folder
 });
 
 // preflight: every failure before any write, the data folder included
-const j = (r) => JSON.parse(r.stdout);
 test('install preflight: not macOS is UNSUPPORTED_OS and writes nothing; --force installs anyway', () => {
   const e = env();
   e.env.CCRUNWAY_PLATFORM = 'linux';

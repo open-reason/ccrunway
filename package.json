@@ -1,6 +1,6 @@
 {
   "name": "ccrunway",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Know when you'll hit the Claude Code 5-hour limit at your current pace, and why.",
   "license": "MIT",
   "type": "module",

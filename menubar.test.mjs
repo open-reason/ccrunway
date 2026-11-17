@@ -236,7 +236,7 @@ test('the linked plugin finds node and draws both tools; uninstall turns the ite
   assert.ok(!isLink(link));
 });
 
-test('install turns the menu bar on when SwiftBar is there, never downloads it; --no-menubar skips it', () => {
+test('install turns the menu bar on when SwiftBar is there; --no-menubar skips it', () => {
   const settings = (e) => path.join(e.dir, 'claude', 'settings.json');
   // SwiftBar with the user's plugin folder: our link beside theirs
   const e = env();
@@ -250,8 +250,10 @@ test('install turns the menu bar on when SwiftBar is there, never downloads it; 
   const j = JSON.parse(r.stdout);
   assert.equal(j.menubar.on, true);
   assert.equal(j.menubar.hint, 'npx ccrunway menubar off');
+  assert.equal(j.menubar.swiftbar_installed, undefined, 'theirs: nothing installed');
   assert.equal(readlinkSync(path.join(folder, 'ccrunway.5s.sh')), plugin(e));
   assert.equal(folderOf(e), '~/plugins', 'their folder setting unchanged');
+  assert.ok(!existsSync(agent(e)), 'not our SwiftBar: no login item');
   // uninstall takes it off again
   cli(e, 'uninstall', '--settings', settings(e));
   assert.ok(!existsSync(path.join(folder, 'ccrunway.5s.sh')));
@@ -264,20 +266,93 @@ test('install turns the menu bar on when SwiftBar is there, never downloads it; 
   assert.match(rn.stdout, /^menu bar: on \(.*\); `npx ccrunway menubar off` removes it$/m);
   assert.equal(folderOf(n), path.join(n.home, 'menubar'));
 
-  // no SwiftBar: nothing installed, a hint instead
-  const x = env();
-  const rx = cli(x, 'install', '--settings', settings(x), '--json');
-  const jx = JSON.parse(rx.stdout);
-  assert.equal(jx.menubar.on, false);
-  assert.match(jx.menubar.detail, /SwiftBar is not installed/);
-  assert.ok(!existsSync(sysApp(x)) && !existsSync(userApp(x)), 'nothing downloaded');
-  assert.ok(!existsSync(path.join(x.home, 'menubar.json')));
-
-  // --no-menubar
-  const s = env();
-  mkdirSync(sysApp(s), { recursive: true });
+  // --no-menubar: nothing, even with SwiftBar missing and brew there
+  const s = env({ CCRUNWAY_SB_BREW: '/opt/homebrew/bin/brew' });
   const rs = cli(s, 'install', '--settings', settings(s), '--no-menubar', '--json');
-  assert.equal(JSON.parse(rs.stdout).menubar.on, false);
+  assert.equal(rs.status, 0, rs.stdout);
+  const js = JSON.parse(rs.stdout);
+  assert.equal(js.menubar.on, false);
+  assert.equal(js.menubar.detail, 'skipped (--no-menubar)');
+  assert.equal(js.menubar.code, null);
+  assert.ok(!existsSync(sysApp(s)) && !existsSync(userApp(s)), 'no SwiftBar installed');
   assert.equal(folderOf(s), null);
   assert.ok(!existsSync(path.join(s.home, 'menubar.json')));
+});
+
+test('install, no SwiftBar, brew on the PATH: installs it without asking (no terminal), links it, opens at login', () => {
+  const e = env({ CCRUNWAY_SB_BREW: '/opt/homebrew/bin/brew' });
+  const settings = path.join(e.dir, 'claude', 'settings.json');
+  const r = cli(e, 'install', '--settings', settings, '--json');
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const j = JSON.parse(r.stdout);
+  assert.equal(j.menubar.on, true);
+  assert.equal(j.menubar.swiftbar_installed, 'brew');
+  assert.ok(existsSync(sysApp(e)));
+  assert.equal(readlinkSync(path.join(e.home, 'menubar', 'ccrunway.5s.sh')), plugin(e));
+  assert.ok(existsSync(agent(e)), 'a SwiftBar we installed opens at login');
+  assert.equal(JSON.parse(readFileSync(path.join(e.home, 'menubar.json'), 'utf8')).installedBy, 'brew');
+
+  // text: says SwiftBar was installed; re-install installs nothing again
+  const t = cli(e, 'install', '--settings', settings);
+  assert.equal(t.status, 0, t.stderr);
+  assert.doesNotMatch(t.stdout, /SwiftBar installed/);
+  assert.match(t.stdout, /^menu bar: on /m);
+});
+
+test('install, no SwiftBar, no brew: downloads the pinned release; a bad checksum leaves the install done, exit 0', () => {
+  const e = env();
+  const rel = fakeRelease(e);
+  const settings = path.join(e.dir, 'claude', 'settings.json');
+  e.env.CCRUNWAY_SWIFTBAR_URL = rel.url;
+
+  e.env.CCRUNWAY_SWIFTBAR_SHA256 = '0'.repeat(64);
+  const bad = cli(e, 'install', '--settings', settings, '--json');
+  assert.equal(bad.status, 0, bad.stdout + bad.stderr);
+  const jb = JSON.parse(bad.stdout);
+  assert.equal(jb.ok, true);
+  assert.equal(jb.menubar.on, false);
+  assert.equal(jb.menubar.code, 'SWIFTBAR_CHECKSUM_MISMATCH');
+  assert.match(jb.menubar.detail, /SHA-256 is [0-9a-f]{64}, expected 0{64}/);
+  assert.ok(!existsSync(userApp(e)), 'nothing installed');
+  assert.ok(existsSync(jb.backup) && JSON.parse(readFileSync(settings, 'utf8')).statusLine, 'settings written');
+  const tb = cli(e, 'install', '--settings', settings);
+  assert.equal(tb.status, 0);
+  assert.match(tb.stdout, /^menu bar: not set up \(.*SHA-256.*\); the rest is installed\. `npx ccrunway menubar on` retries$/m);
+
+  e.env.CCRUNWAY_SWIFTBAR_SHA256 = rel.sha;
+  const r = cli(e, 'install', '--settings', settings, '--json');
+  assert.equal(r.status, 0, r.stdout);
+  const j = JSON.parse(r.stdout);
+  assert.equal(j.menubar.on, true);
+  assert.equal(j.menubar.swiftbar_installed, 'download');
+  assert.ok(existsSync(path.join(userApp(e), 'Contents', 'Info.plist')));
+  assert.ok(existsSync(agent(e)));
+  // uninstall turns it off and removes the SwiftBar it downloaded
+  cli(e, 'uninstall', '--settings', settings);
+  assert.ok(!existsSync(userApp(e)));
+});
+
+test('install --dry-run: menubar_would, and nothing installed or written', () => {
+  const e = env({ CCRUNWAY_SB_BREW: '/opt/homebrew/bin/brew' });
+  const settings = path.join(e.dir, 'claude', 'settings.json');
+  const would = (...extra) => JSON.parse(cli(e, 'install', '--settings', settings, '--dry-run', '--json', ...extra).stdout).menubar_would;
+  assert.equal(would(), 'install SwiftBar and turn on');
+  assert.equal(would('--no-menubar'), 'skip');
+  const t = cli(e, 'install', '--settings', settings, '--dry-run');
+  assert.match(t.stderr, /^menu bar: would install SwiftBar and turn on$/m);
+  assert.ok(!existsSync(sysApp(e)) && !existsSync(e.home) && !existsSync(settings), 'nothing written');
+  mkdirSync(sysApp(e), { recursive: true });
+  assert.equal(would(), 'on');
+  assert.equal(folderOf(e), null);
+  // not macOS (--force): skipped
+  e.env.CCRUNWAY_PLATFORM = 'linux';
+  assert.equal(would('--force'), 'skip');
+});
+
+test('install on another OS with --force skips the menu bar: macOS only', () => {
+  const e = env({ CCRUNWAY_SB_BREW: '/opt/homebrew/bin/brew', CCRUNWAY_PLATFORM: 'linux' });
+  const r = cli(e, 'install', '--settings', path.join(e.dir, 'claude', 'settings.json'), '--force', '--json');
+  assert.equal(r.status, 0, r.stdout);
+  assert.deepEqual(JSON.parse(r.stdout).menubar, { on: false, detail: 'macOS only', code: null, hint: 'npx ccrunway menubar on' });
+  assert.ok(!existsSync(sysApp(e)));
 });

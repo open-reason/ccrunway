@@ -60,7 +60,7 @@ test('help --json lists every command with its flags; text help has the new ones
   const j = json(run(e, 'help', '--json'));
   assert.equal(j.ok, true);
   const names = j.commands.map((c) => c.name);
-  for (const n of ['now', 'doctor', 'status', 'install', 'uninstall', 'mute', 'unmute', 'debug', 'menubar', 'help', 'version'])
+  for (const n of ['now', 'doctor', 'status', 'install', 'uninstall', 'mute', 'unmute', 'debug', 'menubar', 'update', 'help', 'version'])
     assert.ok(names.includes(n), n);
   const flags = (n) => j.commands.find((c) => c.name === n).flags.map((f) => f.name);
   assert.ok(flags('install').includes('--node <abs path>'));
@@ -69,6 +69,8 @@ test('help --json lists every command with its flags; text help has the new ones
   assert.ok(!flags('uninstall').includes('--force'), '--force is install`s only');
   assert.ok(flags('uninstall').includes('--purge'));
   assert.ok(j.env.some((v) => v.name === 'CCRUNWAY_PLATFORM'));
+  assert.ok(j.env.some((v) => v.name === 'CCRUNWAY_REGISTRY'));
+  assert.ok(flags('update').includes('--check'));
   for (const c of j.commands) {
     assert.ok(flags(c.name).includes('--json'), `${c.name} takes --json`);
     assert.equal(typeof c.needs_install, 'boolean');

@@ -21,7 +21,8 @@
 // Tests: CCRUNWAY_SB_ROOT=<dir> puts the Applications folders, the LaunchAgents folder and
 // SwiftBar's preferences (a plist file, written with the real `defaults`) under <dir>;
 // open, pkill, launchctl and brew are printed, not run (brew and open are simulated with
-// files), and CCRUNWAY_SWIFTBAR_URL / CCRUNWAY_SWIFTBAR_SHA256 swap the download.
+// files), and CCRUNWAY_SWIFTBAR_URL / CCRUNWAY_SWIFTBAR_SHA256 swap the download (without
+// the URL a test download fails at once: no test reaches GitHub).
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -63,7 +64,7 @@ export const recordPath = () => path.join(home(), 'menubar.json');
 export const ownFolder = () => path.join(home(), 'menubar');
 const plugin = () => path.join(appDir(), 'menubar', 'plugin', PLUGIN);
 const download = () => ({
-  url: (ROOT && process.env.CCRUNWAY_SWIFTBAR_URL) || SWIFTBAR.url,
+  url: ROOT ? process.env.CCRUNWAY_SWIFTBAR_URL || 'file:///nonexistent/SwiftBar.zip' : SWIFTBAR.url,
   sha256: (ROOT && process.env.CCRUNWAY_SWIFTBAR_SHA256) || SWIFTBAR.sha256,
 });
 
@@ -143,8 +144,9 @@ export function brewPath() {
   return null;
 }
 
-// true, false (answered no), or null: no one to ask (no terminal, or prompt off for --json)
-function ask(question, yes, prompt = true) {
+// true, false (answered no), or null: no one to ask (no terminal, or prompt off for --json).
+// Enter is yes
+export function ask(question, yes, prompt = true) {
   if (yes) return true;
   if (!prompt || !process.stdin.isTTY) return null;
   process.stdout.write(`${question} [Y/n] `);
@@ -260,7 +262,8 @@ function writeAgent(app) {
 }
 
 // → exit code; lines through out(). prompt false (--json): never ask. info gets the
-// failure's { code, fix } when it returns 1
+// failure's { code, fix } when it returns 1, and installed: 'brew' | 'download' when
+// SwiftBar was installed here
 export function menubarOn({ yes = false, out = console.log, prompt = true, info = {} } = {}) {
   if (!ROOT && process.platform !== 'darwin') {
     out('menu bar not set up: SwiftBar is macOS only');
@@ -278,6 +281,7 @@ export function menubarOn({ yes = false, out = console.log, prompt = true, info 
     app = got.app;
     rec.installedBy = got.by;
     rec.app = got.app;
+    info.installed = got.by;
     writeJSON(recordPath(), rec); // before anything else can fail: off must know
   }
   const folder = pluginFolder();

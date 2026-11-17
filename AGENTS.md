@@ -44,14 +44,24 @@ npx ccrunway install --json
 {"schema":1,"ok":true,"settings":"~/.claude/settings.json",
  "backup":"~/.ccrunway/settings.2026-11-17T11-24-32-833Z.json",
  "wraps":"ccusage statusline","skill":"~/.claude/skills/ccrunway/SKILL.md",
- "app":"~/.ccrunway/app","node":"/opt/homebrew/bin/node","version":"0.4.1",
- "menubar":{"on":false,"detail":"SwiftBar is not installed; `npx ccrunway menubar on` installs it after asking","hint":"npx ccrunway menubar on"},
+ "restores":"~/.ccrunway/settings.2026-11-17T11-24-32-833Z.json",
+ "app":"~/.ccrunway/app","node":"/opt/homebrew/bin/node","version":"0.4.2",
+ "menubar":{"on":true,"detail":"~/.ccrunway/menubar/ccrunway.5s.sh (SwiftBar's plugin folder, set by ccrunway)","code":null,"hint":"npx ccrunway menubar off","swiftbar_installed":"brew"},
  "next_step":"open a new Claude Code session",
  "next_steps":["open a new Claude Code session","npx ccrunway doctor"]}
 ```
 
-`wraps` is the user's earlier status line (null if none); it keeps printing above the runway
-line. `skill` is null, with `skill_note`, when `~/.claude/skills/ccrunway` exists and is not
+`backup` is the settings.json copy this run made; `restores` is the one uninstall puts back
+(the first install's, on a re-install). `wraps` is the user's earlier status line (null if
+none); it keeps printing above the runway line.
+
+`menubar`: install turns the menu bar item on and, when SwiftBar is missing, installs it
+(`swiftbar_installed`: `brew` or `download`) without asking under `--json`. Tell the user
+before running install; pass `--no-menubar` if they don't want SwiftBar. A SwiftBar failure
+does not fail the install: `menubar.on` is false, `menubar.code` is one of the `menubar on`
+codes below (`SWIFTBAR_CHECKSUM_MISMATCH`, …), and `menubar.hint` is the command to retry.
+`install --dry-run --json` says what it would do in `menubar_would`: `on`,
+`install SwiftBar and turn on`, or `skip` (`--no-menubar`, or not macOS). `skill` is null, with `skill_note`, when `~/.claude/skills/ccrunway` exists and is not
 ccrunway's. If node comes from nvm or fnm, suggest `--node` with a path that survives node
 upgrades (see the README's [Install](README.md#install)); install already swaps fnm's per-shell
 temp path (`fnm_multishells`) for the real one.
@@ -159,6 +169,26 @@ tool shown).
 Other requests: "is ccrunway working?" → `doctor --json`; "is it on?" → `status --json`;
 `mute 2h`, `unmute`, `debug on|off`, `menubar` (status).
 
+## 6. Update
+
+```bash
+npx ccrunway update --check --json   # report only
+npx ccrunway update --json           # install the latest if it is newer
+```
+
+```json
+{"schema":1,"ok":true,"installed":"0.4.1","running":"0.4.1","latest":"0.4.2",
+ "update_available":true,"updated":true,"command":"npx -y ccrunway@0.4.2 install --json",
+ "message":"updated to 0.4.2","install":{…install's own object…}}
+```
+
+`installed` is the installed copy's version (null when not installed), `running` the CLI you
+ran. Without `--check`, when `latest` is newer than `installed` (or nothing is installed),
+update runs `npx -y ccrunway@<latest> install` and embeds its result as `install`;
+`--settings`, `--node` and `--no-menubar` are passed on. That install turns the menu bar on
+like any install. Already the latest: `updated` false, `message` `ccrunway <v> is the latest`.
+The check is one GET to `https://registry.npmjs.org/ccrunway/latest` (5 s timeout).
+
 ## JSON contract
 
 - Every `--json` output is one object with `"schema": 1` and `"ok"`.
@@ -184,13 +214,15 @@ Other requests: "is ccrunway working?" → `doctor --json`; "is it on?" → `sta
 | `SETTINGS_UNREADABLE` | install, uninstall | settings.json is not valid JSON | ask the user to fix the JSON; don't overwrite it |
 | `NO_SETTINGS` | uninstall | no settings.json at that path | nothing to uninstall |
 | `UNSAFE_PURGE` | uninstall --purge | the data folder is `/`, the home folder, or holds files ccrunway did not write; nothing was changed | `npx ccrunway uninstall` without `--purge` |
+| `UPDATE_CHECK_FAILED` | update | the npm registry did not answer with a version (offline, timeout) | retry, or `npx ccrunway@latest install` |
+| `UPDATE_FAILED` | update | the `npx ccrunway@<latest> install` it ran failed without its own error | read `install`, then `npx ccrunway@latest install` |
 | `NEEDS_CONFIRM` | menubar on | SwiftBar must be installed and nobody could be asked | ask the user, then `npx ccrunway menubar on --yes` |
 | `DECLINED` | menubar on | the user answered no to installing SwiftBar | nothing |
 | `NOT_MACOS` | menubar on | not macOS | none |
 | `MACOS_TOO_OLD` | menubar on | the SwiftBar download needs macOS 12+ | none |
 | `SWIFTBAR_INSTALL_FAILED` | menubar on | brew or unpacking failed | `brew install --cask swiftbar`, then retry |
 | `SWIFTBAR_DOWNLOAD_FAILED` | menubar on | the download failed | retry `npx ccrunway menubar on --yes` |
-| `SWIFTBAR_CHECKSUM_MISMATCH` | menubar on | the download's SHA-256 is wrong; nothing installed | stop and tell the user |
+| `SWIFTBAR_CHECKSUM_MISMATCH` | menubar on, install's `menubar.code` | the download's SHA-256 is wrong; nothing installed | stop and tell the user |
 | `PLUGIN_FOLDER_MISSING` | menubar on | SwiftBar's plugin folder does not exist | tell the user |
 | `PLUGIN_FILE_TAKEN` | menubar on | a file of the user's has the plugin's name | tell the user; ccrunway left it alone |
 | `FAILED` | menubar | any other failure | read `message` |
@@ -199,9 +231,9 @@ Other requests: "is ccrunway working?" → `doctor --json`; "is it on?" → `sta
 
 - Edit ccrunway's entries in settings.json by hand. Use `install` and `uninstall`.
 - Uninstall to "repair": re-run `install`.
-- Run `menubar on` without the user's OK: it may install SwiftBar (Homebrew or a download),
-  change SwiftBar's plugin folder and restart it. `install` itself never downloads SwiftBar:
-  when SwiftBar is already installed it adds the menu bar item (`menubar.on` in its output),
-  and `--no-menubar` skips that if the user doesn't want it.
+- Run `install` (or `update`) without telling the user it may install SwiftBar (Homebrew,
+  or a download from GitHub) for the menu bar item, change SwiftBar's plugin folder and
+  restart it; under `--json` it does not ask. Pass `--no-menubar` if they don't want it.
+- Run `menubar on --yes` without the user's OK.
 - Pass `--force` on a non-macOS system, or `--purge`, without the user's OK.
 - Mute or uninstall on your own initiative.

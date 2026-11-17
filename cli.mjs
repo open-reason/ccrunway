@@ -19,6 +19,7 @@ import { clock, isoLocal } from './range.mjs';
 import { here, isOurHook, isOurStatus, settingsPath } from './settings.mjs';
 import { home, mutedUntil, readConfig, readJSON, writeConfig } from './state.mjs';
 import { menubarOff, menubarOn, menubarState } from './swiftbar.mjs';
+import { latestVersion, newer } from './update.mjs';
 
 const VERSION = readJSON(path.join(here, 'package.json'), {})?.version ?? '?';
 const SCHEMA = 1;
@@ -34,7 +35,8 @@ const F = {
   'exit-code': { description: 'exit 10 when the worst tool shown is amber, 11 when red' },
   force: { description: 'install on an OS other than macOS (untested)' },
   purge: { description: 'also delete the data folder and the installed copy (CCRUNWAY_HOME)' },
-  'no-menubar': { description: 'leave the menu bar item off even when SwiftBar is installed' },
+  'no-menubar': { description: 'leave the menu bar item off, and never install SwiftBar' },
+  check: { description: 'report the versions only; install nothing' },
 };
 
 const COMMANDS = [
@@ -67,7 +69,7 @@ const COMMANDS = [
     flags: ['json', 'settings', 'dry-run', 'node', 'force', 'no-menubar'],
     needs_install: false,
     description:
-      'add the status line and hooks to settings.json; your current status line keeps printing above ours. Turns the menu bar item on when SwiftBar is installed (never downloads it)',
+      'add the status line and hooks to settings.json; your current status line keeps printing above ours. Turns the menu bar item on, installing SwiftBar (Homebrew, or a checked download) if missing: asks once on a terminal, goes ahead under --json or without one; a SwiftBar failure leaves the install done. --no-menubar skips it',
   },
   {
     name: 'uninstall',
@@ -106,6 +108,14 @@ const COMMANDS = [
     description:
       "Claude Code's and Codex's pace in the macOS menu bar through SwiftBar. on installs SwiftBar (Homebrew, or a download) if missing, after asking (--yes); off undoes only what on did; no argument = status",
   },
+  {
+    name: 'update',
+    args: '',
+    flags: ['json', 'check', 'settings', 'node', 'no-menubar'],
+    needs_install: false,
+    description:
+      'ask registry.npmjs.org for the latest version; if it is newer than the installed copy (or nothing is installed), run `npx -y ccrunway@<latest> install` with --settings, --node, --no-menubar passed on. --check only reports',
+  },
   { name: 'help', args: '', flags: ['json'], needs_install: false, description: 'this help' },
   { name: 'version', args: '', flags: ['json'], needs_install: false, description: 'the version' },
 ];
@@ -124,6 +134,8 @@ const ENV = [
   { name: 'NO_COLOR', description: 'no colour in text output' },
   { name: 'CCRUNWAY_NOW', description: 'tests: the clock `now` reads at (ms or ISO)' },
   { name: 'CCRUNWAY_PLATFORM', description: 'tests: the OS install and doctor see (e.g. linux)' },
+  { name: 'CCRUNWAY_REGISTRY', description: 'tests: the npm registry `update` asks (default https://registry.npmjs.org)' },
+  { name: 'CCRUNWAY_UPDATE_DRY', description: 'tests: 1 makes `update` report the install command instead of running it' },
 ];
 const STATE_DOC = {
   none: 'no 5-hour meter reading for this tool',
@@ -140,7 +152,9 @@ const HELP = `ccrunway ${VERSION}: when you will hit the Claude Code 5-hour limi
                            each tool's meter, pace, verdict, top drain and chats, with a
                            cold cache's next-send cost; --exit-code exits 10 amber, 11 red
   install                  add the status line and hooks to ~/.claude/settings.json;
-                           your current status line keeps printing above ours.
+                           your current status line keeps printing above ours. Turns
+                           the menu bar item on, installing SwiftBar if missing (asks
+                           once; --no-menubar skips it).
                            --node <absolute path> picks the node they run with;
                            macOS only (--force tries anyway, untested)
   doctor                   is it set up and working? one line per check, with the fix
@@ -155,6 +169,8 @@ const HELP = `ccrunway ${VERSION}: when you will hit the Claude Code 5-hour limi
                            SwiftBar (installed with Homebrew, or downloaded, if missing;
                            asks first, --yes to skip the question). off undoes only what
                            on did; no argument shows its state
+  update [--check]         install the latest version from npm if it is newer;
+                           --check only reports
 
   Every command takes --json: one JSON object on stdout ("schema": 1, "ok"); \`help --json\`
   lists the commands, flags and exit codes. Exit codes: 0 ok, 1 failed, 2 bad usage,
@@ -326,6 +342,65 @@ switch (cmd) {
   case 'install':
     script('install.mjs', rest);
     break;
+
+  case 'update': {
+    let latest;
+    try {
+      latest = await latestVersion();
+    } catch (e) {
+      fail(`could not get the latest version from the npm registry: ${e.message}`, {
+        code: 'UPDATE_CHECK_FAILED',
+        fix: 'npx ccrunway@latest install',
+      });
+    }
+    const meta = readJSON(path.join(home(), 'install.json'), null);
+    const installedV = meta?.version ?? readJSON(path.join(home(), 'app', 'package.json'), null)?.version ?? null;
+    const v = { installed: installedV, running: VERSION, latest };
+    const available = newer(latest, installedV ?? VERSION);
+    // not installed: update installs, as install would
+    const go = !opt.check && (installedV == null || available);
+    const argv2 = ['-y', `ccrunway@${latest}`, 'install'];
+    for (const f of ['settings', 'node']) if (opt[f] != null) argv2.push(`--${f}`, opt[f]);
+    if (opt['no-menubar']) argv2.push('--no-menubar');
+    if (JSON_OUT) argv2.push('--json');
+    const command = `npx ${argv2.join(' ')}`;
+    const message = available
+      ? `ccrunway ${latest} is out (installed: ${installedV ?? 'none'}, running: ${VERSION})`
+      : installedV == null
+        ? `ccrunway ${latest} is the latest; it is not installed`
+        : `ccrunway ${installedV} is the latest`;
+    if (!go) {
+      if (JSON_OUT) emit({ ...v, update_available: available, updated: false, message, ...(opt.check && (available || installedV == null) ? { command } : {}) });
+      else {
+        out(`installed: ${installedV ?? 'none'} · running: ${VERSION} · latest: ${latest}`);
+        out(available || installedV == null ? `${message}; \`npx ccrunway update\` installs it` : message);
+      }
+      break;
+    }
+    if (process.env.CCRUNWAY_UPDATE_DRY === '1') {
+      if (JSON_OUT) emit({ ...v, update_available: available, updated: false, dry_run: true, command, message });
+      else out(`would run: ${command}`);
+      break;
+    }
+    if (!JSON_OUT) out(`${message}; running ${command}`);
+    // the new version's own install does the work: its files, its settings, its menu bar
+    const r = spawnSync('npx', argv2, { stdio: JSON_OUT ? ['inherit', 'pipe', 'inherit'] : 'inherit', encoding: 'utf8' });
+    if (!JSON_OUT) process.exit(r.status ?? 1);
+    let install = null;
+    try {
+      install = JSON.parse((r.stdout || '').trim().split('\n').at(-1));
+    } catch {}
+    if (r.status === 0 && install?.ok)
+      emit({ ...v, update_available: available, updated: true, command, message: `updated to ${latest}`, install });
+    else
+      fail(install?.error?.message ?? `\`${command}\` failed (exit ${r.status ?? 'signal'})`, {
+        code: install?.error?.code ?? 'UPDATE_FAILED',
+        fix: install?.error?.fix ?? 'npx ccrunway@latest install',
+        exit: r.status || 1,
+        extra: { ...v, update_available: available, updated: false, command, install },
+      });
+    break;
+  }
 
   case 'uninstall':
     script('uninstall.mjs', rest);
