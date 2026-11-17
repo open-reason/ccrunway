@@ -34,6 +34,7 @@ const F = {
   'exit-code': { description: 'exit 10 when the worst tool shown is amber, 11 when red' },
   force: { description: 'install on an OS other than macOS (untested)' },
   purge: { description: 'also delete the data folder and the installed copy (CCRUNWAY_HOME)' },
+  'no-menubar': { description: 'leave the menu bar item off even when SwiftBar is installed' },
 };
 
 const COMMANDS = [
@@ -63,9 +64,10 @@ const COMMANDS = [
   {
     name: 'install',
     args: '',
-    flags: ['json', 'settings', 'dry-run', 'node', 'force'],
+    flags: ['json', 'settings', 'dry-run', 'node', 'force', 'no-menubar'],
     needs_install: false,
-    description: 'add the status line and hooks to settings.json; your current status line keeps printing above ours',
+    description:
+      'add the status line and hooks to settings.json; your current status line keeps printing above ours. Turns the menu bar item on when SwiftBar is installed (never downloads it)',
   },
   {
     name: 'uninstall',

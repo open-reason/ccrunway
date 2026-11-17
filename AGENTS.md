@@ -45,6 +45,7 @@ npx ccrunway install --json
  "backup":"~/.ccrunway/settings.2026-11-17T11-24-32-833Z.json",
  "wraps":"ccusage statusline","skill":"~/.claude/skills/ccrunway/SKILL.md",
  "app":"~/.ccrunway/app","node":"/opt/homebrew/bin/node","version":"0.4.0",
+ "menubar":{"on":false,"detail":"SwiftBar is not installed; `npx ccrunway menubar on` installs it after asking","hint":"npx ccrunway menubar on"},
  "next_step":"open a new Claude Code session",
  "next_steps":["open a new Claude Code session","npx ccrunway doctor"]}
 ```
@@ -199,6 +200,8 @@ Other requests: "is ccrunway working?" → `doctor --json`; "is it on?" → `sta
 - Edit ccrunway's entries in settings.json by hand. Use `install` and `uninstall`.
 - Uninstall to "repair": re-run `install`.
 - Run `menubar on` without the user's OK: it may install SwiftBar (Homebrew or a download),
-  change SwiftBar's plugin folder and restart it.
+  change SwiftBar's plugin folder and restart it. `install` itself never downloads SwiftBar:
+  when SwiftBar is already installed it adds the menu bar item (`menubar.on` in its output),
+  and `--no-menubar` skips that if the user doesn't want it.
 - Pass `--force` on a non-macOS system, or `--purge`, without the user's OK.
 - Mute or uninstall on your own initiative.

@@ -30,7 +30,9 @@ function env() {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'ccrunway install-'));
   const me = path.join(dir, 'user');
   mkdirSync(me);
-  const e = { ...process.env, HOME: me, NO_COLOR: '1' };
+  // SwiftBar under a temp root with no SwiftBar.app: install's menu bar step never
+  // reaches the real one (menubar.test.mjs covers it with one)
+  const e = { ...process.env, HOME: me, NO_COLOR: '1', CCRUNWAY_SB_ROOT: path.join(dir, 'sb') };
   delete e.CCRUNWAY_HOME;
   return {
     dir,

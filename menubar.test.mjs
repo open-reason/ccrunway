@@ -235,3 +235,49 @@ test('the linked plugin finds node and draws both tools; uninstall turns the ite
   assert.match(off.stdout, /menu bar: off/);
   assert.ok(!isLink(link));
 });
+
+test('install turns the menu bar on when SwiftBar is there, never downloads it; --no-menubar skips it', () => {
+  const settings = (e) => path.join(e.dir, 'claude', 'settings.json');
+  // SwiftBar with the user's plugin folder: our link beside theirs
+  const e = env();
+  mkdirSync(sysApp(e), { recursive: true });
+  writeFileSync(path.join(e.root, 'running'), '');
+  const folder = path.join(e.root, 'home', 'plugins');
+  mkdirSync(folder);
+  execFileSync('defaults', ['write', e.prefs, 'PluginDirectory', '-string', '~/plugins']);
+  const r = cli(e, 'install', '--settings', settings(e), '--json');
+  assert.equal(r.status, 0, r.stdout);
+  const j = JSON.parse(r.stdout);
+  assert.equal(j.menubar.on, true);
+  assert.equal(j.menubar.hint, 'npx ccrunway menubar off');
+  assert.equal(readlinkSync(path.join(folder, 'ccrunway.5s.sh')), plugin(e));
+  assert.equal(folderOf(e), '~/plugins', 'their folder setting unchanged');
+  // uninstall takes it off again
+  cli(e, 'uninstall', '--settings', settings(e));
+  assert.ok(!existsSync(path.join(folder, 'ccrunway.5s.sh')));
+
+  // SwiftBar with no plugin folder (or-otel's coach off clears it): ours is set
+  const n = env();
+  mkdirSync(sysApp(n), { recursive: true });
+  const rn = cli(n, 'install', '--settings', settings(n));
+  assert.equal(rn.status, 0, rn.stdout);
+  assert.match(rn.stdout, /^menu bar: on \(.*\); `npx ccrunway menubar off` removes it$/m);
+  assert.equal(folderOf(n), path.join(n.home, 'menubar'));
+
+  // no SwiftBar: nothing installed, a hint instead
+  const x = env();
+  const rx = cli(x, 'install', '--settings', settings(x), '--json');
+  const jx = JSON.parse(rx.stdout);
+  assert.equal(jx.menubar.on, false);
+  assert.match(jx.menubar.detail, /SwiftBar is not installed/);
+  assert.ok(!existsSync(sysApp(x)) && !existsSync(userApp(x)), 'nothing downloaded');
+  assert.ok(!existsSync(path.join(x.home, 'menubar.json')));
+
+  // --no-menubar
+  const s = env();
+  mkdirSync(sysApp(s), { recursive: true });
+  const rs = cli(s, 'install', '--settings', settings(s), '--no-menubar', '--json');
+  assert.equal(JSON.parse(rs.stdout).menubar.on, false);
+  assert.equal(folderOf(s), null);
+  assert.ok(!existsSync(path.join(s.home, 'menubar.json')));
+});

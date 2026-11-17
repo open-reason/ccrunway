@@ -13,7 +13,7 @@ ccrunway · pace ▮▮▮▮  30%/h · Fable 5.2 · 180k · 5h 62% · ✗ runs 
          · top drain: this chat, browser 7%/h
 ```
 
-`ccrunway menubar on` also puts Claude Code's and Codex's pace in the macOS menu bar.
+If [SwiftBar](https://github.com/swiftbar/SwiftBar) is on your Mac, install also puts Claude Code's and Codex's pace in the macOS menu bar; otherwise `ccrunway menubar on` adds it.
 
 ## Install
 
@@ -47,6 +47,9 @@ What install changes:
 - `~/.ccrunway/app`: a copy of the code, so clearing the npx cache breaks nothing.
 - `~/.ccrunway/settings.<timestamp>.json`: a backup of your settings.json before the change,
   and `~/.ccrunway/install.json`: what install changed, which uninstall reads.
+- The menu bar item, only if SwiftBar is already installed: one link in SwiftBar's plugin
+  folder, or, when SwiftBar has none, `~/.ccrunway/menubar` as its folder. Install never
+  downloads SwiftBar. `--no-menubar` skips this; `npx ccrunway menubar off` removes it.
 
 Running install again is safe: it replaces its own entries and keeps pointing uninstall at the
 first backup. Use it to repair or update; there is no need to uninstall first.
@@ -115,6 +118,8 @@ in the hook and status line commands, so Claude Code needs no setting; set it fo
 `~/.codex`), `NO_COLOR` turns colour off.
 
 ## Menu bar (Claude Code and Codex)
+
+Install turns it on when SwiftBar is already installed. Otherwise:
 
 ```bash
 npx ccrunway menubar on

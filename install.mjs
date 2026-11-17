@@ -153,6 +153,26 @@ try {
   skillAt = null;
 }
 
+// the menu bar item, when SwiftBar is already on this Mac: nothing is downloaded here
+// (`menubar on` asks before installing SwiftBar). With a plugin folder our link goes in
+// beside the user's plugins; with none, SwiftBar gets ccrunway's own folder, so no one
+// else's setup changes. --no-menubar skips it; `menubar off` removes it.
+let menubar = { on: false, detail: null, hint: 'npx ccrunway menubar on' };
+if (opt['no-menubar']) menubar.detail = 'skipped (--no-menubar)';
+else {
+  const sb = await import('./swiftbar.mjs');
+  if (!sb.swiftbarApp()) menubar.detail = 'SwiftBar is not installed; `npx ccrunway menubar on` installs it after asking';
+  else {
+    const said = [];
+    const info = {};
+    const code = sb.menubarOn({ yes: false, prompt: false, out: (l) => said.push(l), info });
+    menubar =
+      code === 0
+        ? { on: true, detail: said[0]?.replace(/^menu bar: /, '') ?? null, hint: 'npx ccrunway menubar off' }
+        : { on: false, detail: said.join('; ') || info.code || 'not set up', hint: 'npx ccrunway menubar on' };
+  }
+}
+
 const wrapped = prevStatusLine?.command;
 if (json) {
   emit({
@@ -164,6 +184,7 @@ if (json) {
     app,
     node,
     version: readJSON(path.join(here, 'package.json'), {})?.version ?? null,
+    menubar,
     next_step: 'open a new Claude Code session',
     next_steps: ['open a new Claude Code session', 'npx ccrunway doctor'],
   });
@@ -176,6 +197,9 @@ process.stdout.write(
     `backup: ${backup}`,
     wrapped ? `your status line stays on top: ${wrapped}` : 'no earlier status line to wrap',
     skillNote,
+    menubar.on
+      ? `menu bar: on (${menubar.detail}); \`npx ccrunway menubar off\` removes it`
+      : `menu bar: off (${menubar.detail}); \`npx ccrunway menubar on\` adds it`,
     'open a new Claude Code session to see the runway line',
     'check it: npx ccrunway doctor',
     '',
