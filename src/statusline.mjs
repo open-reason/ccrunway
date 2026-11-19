@@ -50,6 +50,9 @@
 //     rate_limits.five_hour last changed (resets_at moves by fractions of a second on
 //     every fresh response), e.g. … ✓ on track · ~15% spare at 2:35:07pm · meter 42s old
 // The earlier command gets 4 s; if it fails or times out, only the runway line prints.
+// It runs with CCRUNWAY_STATUSLINE=1. Started with that set, this prints nothing: the
+// earlier command led back here (or-otel wraps the status line it finds too, and a later
+// `or-otel setup` saves ours as the one it wraps), and running it again would never end.
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -80,6 +83,8 @@ import {
   writeSnapshot,
 } from './state.mjs';
 
+if (process.env.CCRUNWAY_STATUSLINE === '1') process.exit(0);
+
 let config = {};
 try {
   config = readConfig();
@@ -99,6 +104,7 @@ try {
       encoding: 'utf8',
       timeout: 4000,
       stdio: ['pipe', 'pipe', 'ignore'],
+      env: { ...process.env, CCRUNWAY_STATUSLINE: '1' },
     });
 } catch {}
 

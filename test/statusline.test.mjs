@@ -265,6 +265,19 @@ test('wrap: the earlier status line prints first with the same stdin, then the r
   assert.equal(lines[3], '');
 });
 
+test('wrap: an earlier status line that leads back to ours runs once, and ours prints once', () => {
+  // or-otel wraps the status line it finds too: installed over each other, each has the other
+  const e = env();
+  const theirs = `echo theirs; "${process.execPath}" "${path.join(src, 'statusline.mjs')}"`;
+  wrap(e, theirs);
+  const snap = snapshot('w0', { model: 'Opus 5.5', ctx: 60_000 });
+  const lines = run(e, 'statusline.mjs', snap).stdout.split('\n');
+  assert.equal(lines[0], 'theirs');
+  assert.match(lines[1], /^ccrunway · pace /);
+  assert.equal(lines[2], '');
+  assert.equal(lines.length, 3);
+});
+
 test('wrap: no earlier status line → only ours; a failing or hanging one → ours still prints', () => {
   const snap = snapshot('w2', { model: 'Opus 5.5', ctx: 60_000 });
   const none = env();
